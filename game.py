@@ -1,18 +1,25 @@
 import pygame
 from physics import *
 from typing import Tuple, Union, List
+import os
 
 
 class Level:
     """
-    Description:
+    Description: Levels of the game
 
     === Public Attributes ===
-    setting
+    difficulty: difficulty of the level
+
+    === Private Attributes ===
     _asset: Loaded assets of the game
     _asset_location: The locations of game assets
     _physics: Sets of physics rules supported by this level
+
+    === Representation Invariants ===
+    - difficulty must be an integer from 0 - 3
     """
+    difficulty: int
     _asset: dict[str, dict[str, Union[pygame.Surface, pygame.mixer.Sound, str]]]
     _asset_location: List[str]
 
@@ -33,10 +40,9 @@ class Level:
             elif suffix in music_format:
                 self._asset['music'][data[0]] = data[1]
 
-    def run(self, screen: pygame.Surface):
+    def run(self, screen: pygame.Surface, difficulty: int):
         """
-
-        :return:
+        Run the level with the given setting
         """
         running = True
         while running:
@@ -46,41 +52,61 @@ class Level:
 class Game:
     """
     Description:
+        A reusable game class
 
     === Private Attributes ===
         _screen: Screen of the game that gets displayed to the player
-        _screen_size: size of the screen
-        _name: Name of the game
-
         _levels: Levels of this game
+        _file: Path to the game files
+        _base_dir: Base directory of the game
     """
-
+    _base_dir: str
     _screen: pygame.Surface
-    _screen_size: Tuple[int, int]
     _levels: List[Level]
+    _file: str
 
-    def __init__(self, name: str,
-                 screen_size: Tuple[int, int]) -> None:
-        self._name = name
-        self._screen_size = screen_size
+    def __init__(self, file: str) -> None:
+        self._file = file
 
     def start(self) -> None:
         """
-            Description: Start the game
+        Initialize the engine and start the game.
         """
+        os.chdir(self._file)
         pygame.init()
-        pygame.display.set_icon(pygame.image.load("Lobster_clean.png"))
-        self._screen = pygame.display.set_mode(self._screen_size)
-        pygame.display.set_caption(self._name)
         pygame.mixer.init()
+        with open('asset_location.txt', 'r+') as game_file:
+            setting = {}
+            for line in game_file:
+                line = line.split(':')
+                setting[line[0]] = line[1]
+            os.chdir(setting['name'])
+            self._base_dir = os.getcwd()
+            self._apply_settings(setting)
+            self._load_level(setting['levels'])
 
-        self.load_level()
-
-    def load_level(self):
+    def _apply_settings(self, setting: dict[str, str]) -> None:
         """
-
-        :return:
+        Apply game gui settings
         """
+        pygame.display.set_icon(pygame.image.load(setting['icon']))
+        size = setting['screen_size'].split(',')
+        size = (int(size[0]), int(size[1]))
+        self._screen = pygame.display.set_mode(size)
+        pygame.display.set_caption(setting['name'])
+
+    def _load_level(self, path: str) -> None:
+        """
+        Load levels from the "Levels" folder into the game.
+        """
+        os.chdir(path)
+        levels = os.listdir()
+        for lev in levels:
+            with open(lev, 'r+') as level_file:
+                self._levels.append(self._read_level(lev))
+
+    def _read_level(self, lev) -> Level:
+        pass
 
     def display_menu(self):
         return

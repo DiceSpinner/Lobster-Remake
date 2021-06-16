@@ -38,7 +38,7 @@ class Entity(Particle):
 
     Additional Attributes:
         shape: (str) Shape of this entity
-        radius: (str) Physics radius of this entity
+        radius: (str) Physical radius of this entity
         light_source: Whether this entity is a light source or not
         brightness: Current brightness of this entity
         light_power: The ability of this entity to produce light
@@ -121,7 +121,7 @@ class GameMap:
     width: width of the map (in blocks)
     content: content of the map
     maximum_radius: The maximum radius of all entities on this map, this
-        variable will be used to implement more efficient collision detection
+        variable may be used to implement more efficient collision detection
         method in the future.
     blocks: Pre-defined blocks for this map
     creatures: Pre-defined creatures for this map
@@ -145,10 +145,10 @@ class GameMap:
             'block': [],
             'creature': []
         }
-        self.load_assets(blocks, creatures)
+        self._load_assets(blocks, creatures)
         self._construct_content(content)
 
-    def load_assets(self, blocks: str, creatures: str):
+    def _load_assets(self, blocks: str, creatures: str):
         """
         Load in predefined blocks and creatures for this map.
         """
@@ -197,7 +197,7 @@ class GameMap:
         with open(sets[1]) as creature_file:
             for creature in creature_file:
                 row_blocks = []
-                self.content['block'].append(row_blocks)
+                self.content['creature'].append(row_blocks)
 
 
 class Camera:
