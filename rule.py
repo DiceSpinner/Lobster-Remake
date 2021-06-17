@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Union, List, Optional, Dict, Any, Tuple
 from data_structures import Queue
-from error import IllegalConditionalOperatorError
+from error import IllegalConditionalOperatorError, NoneConditionError
 
 OP_AND = 'and'
 OP_OR = 'or'
@@ -12,26 +12,29 @@ OPERATORS = [OP_AND, OP_OR, OP_NOT]
 
 class Rule:
     """
-    Description: A boolean expression tree representing a rule.
+    A boolean expression tree representing a rule. This class currently
+    only supports numerical comparison
 
     === Private Attributes ===
     _root: The name of the attribute that will be applied by this rule.
     _condition: The required condition for _root to satisfy. The condition
-        supports boolean expressions that involves '<', '=', '>'.
+        supports numerical boolean expressions that involves '<', '=', '>'.
     _subtrees: The list of all subtrees of this rule.
 
     === Representation Invariants ===
-    - _operator Can either be any string or one of the operators defined above,
-        len(_subtrees) == 0 in the former case and > 0 in the latter case.
-    - _condition must be None when _root is an operator
+    - _operator Can either be any string or one of the operators defined above
+    - len(_subtrees) == 0 when _operator is not an operator defined above
+    - len(_subtrees) == 1 when _operator is OP_NOT
+    - len(_subtrees) >= 2 when _operator is OP_AND or OP_OR
+    - _condition is None if and only if _root is an operator
     - _condition can only contain one of '<', '=', '>'.
     """
     _root: Optional[str]
     _subtrees: List[Rule]
-    _condition: Union[Tuple[str, str], str]
+    _condition: Union[Tuple[str, Union[int, float]], bool]
 
     def __init__(self, root: str, subtrees: List[Rule],
-                 condition: Optional[str]):
+                 condition: Optional[Union[str, bool]]):
         """
         Initialize the rule with the given root and subtrees, an exception
         will be raised if the input condition is invalid.
@@ -39,19 +42,18 @@ class Rule:
         self._root = root
         self._subtrees = subtrees[:]
         if root not in OPERATORS:
-            if not (condition == 'true' or condition == 'false'):
-                flag = False
-                condition = condition.split(" ")
-                operator = condition[0]
-                content = condition[1]
-                ops = ['<', '=', '>']
-
-                for op in ops:
-                    if op == operator:
-                        flag = True
-                if not flag or not content.isnumeric():
+            if not isinstance(condition, bool):
+                if condition is None:
+                    raise NoneConditionError
+                if condition[0] not in ['>', '=', '<']:
                     raise IllegalConditionalOperatorError
-                self._condition = (condition[0], condition[1])
+                condition = condition.split(' ')
+                value = condition[1]
+                if '.' in value:
+                    value = float(value)
+                else:
+                    value = int(value)
+                self._condition = (condition[0], value)
             else:
                 self._condition = condition
 
@@ -65,39 +67,71 @@ class Rule:
         >>> r2 = Rule('speed', [], '> 0')
         >>> print(r2)
         speed > 0
-        >>> r3 = Rule('and', [r1, r2], None)
+        >>> r3 = Rule(OP_AND, [r1, r2], None)
         >>> print(r3)
         ( health > 0 and speed > 0 )
+        >>> r4 = Rule('collidable', [], True)
+        >>> print(r4)
+        collidable = True
+        >>> r5 = Rule('attack_damage', [], '= 0.5')
+        >>> print(r5)
+        attack_damage = 0.5
+        >>> r6 = Rule('vision', [], '= 6')
+        >>> r7 = Rule(OP_NOT, [r6], None)
+        >>> print(r7)
+        ( not vision = 6 )
         """
         if self._root not in OPERATORS:
-            if self._condition == 'true' or self._condition == 'false':
-                return self._root + ' == ' + self._condition
+            if isinstance(self._condition, bool):
+                return self._root + ' = ' + str(self._condition)
             return self._root + ' ' + self._condition[0] + ' ' + \
-                self._condition[1]
+                   str(self._condition[1])
         s = ''
-        for i in range(len(self._subtrees)):
-            s += self._subtrees[i].__str__()
-            if i < (len(self._subtrees) - 1):
-                s += ' ' + self._root + ' '
-        return '( ' + s + ' )'
+        if not self._root == OP_NOT:
+            for i in range(len(self._subtrees)):
+                s += self._subtrees[i].__str__()
+                if i < (len(self._subtrees) - 1):
+                    s += ' ' + self._root + ' '
+            return '( ' + s + ' )'
+        return '( not ' + self._subtrees[0].__str__() + ' )'
 
     def eval(self, content: Dict[str, Any]) -> bool:
         """
-        return the result of the application of this rule to the content
+        return the result of the application of this rule to the subject
 
+        >>> r1 = Rule('health', [], '> 0')
+        >>> ct = {'health': 0}
+        >>> r1.eval(ct)
+        False
+        >>> ct = {}
+        >>> r1.eval(ct)
+        False
+        >>> ct = {'health': 10}
+        >>> r1.eval(ct)
+        True
+        >>> ct['speed'] = 10
+        >>> r1.eval(ct)
+        True
+        >>> r2 = Rule('speed', [], '> 0')
+        >>> r3 = Rule('and', [r1, r2], None)
+        >>> r3.eval(ct)
+        True
+        >>> ct['speed'] = 0
+        >>> r3.eval(ct)
+        False
         """
         if self._root not in OPERATORS:
             if self._root in content:
-                if self._condition == 'true':
+                if isinstance(self._condition, bool):
+                    if not self._condition:
+                        return not content[self._root]
                     return content[self._root]
-                if self._condition == 'false':
-                    return not content[self._root]
-                if '<' in self._condition:
-                    return content[self._root] < str(self._condition[1])
-                if '>' in self._condition:
-                    return content[self._root] > str(self._condition[1])
-                if '=' in self._condition:
-                    return content[self._root] == str(self._condition[1])
+                if self._condition[0] == '<':
+                    return content[self._root] < self._condition[1]
+                if self._condition[0] == '>':
+                    return content[self._root] > self._condition[1]
+                if self._condition[0] == '=':
+                    return content[self._root] == self._condition[1]
             return False
         if self._root == OP_NOT:
             return not self._subtrees[0].eval(content)
@@ -112,33 +146,55 @@ class Rule:
                     return False
             return True
 
+    def append(self, subtree: Rule) -> None:
+        """
+        Append the subtree to _subtrees
+        """
+        self._subtrees.append(subtree)
 
-def construct_from_list(values: List[List[Union[str, int]]]) -> Rule:
+
+def construct_from_list(
+        values: List[List[Union[str, Tuple[str, Union[str, bool]]]]]) -> Rule:
     """
     Construct a rule from <values>.
 
     Precondition:
     <values> encodes a valid rule
 
-    True
-
-
-    root = values[0][0]
-    if root not in OPERATORS:
-        return Rule()
+    >>> lst = [[OP_OR], [('health', '> 0'), ('speed', '> 0')]]
+    >>> r1 = construct_from_list(lst)
+    >>> print(r1)
+    ( health > 0 or speed > 0 )
+    >>> lst2 = [[OP_NOT], [OP_AND], [('health', '> 0'), ('speed', '> 0')]]
+    >>> r2 = construct_from_list(lst2)
+    >>> print(r2)
+    ( not ( health > 0 and speed > 0 ) )
+    >>> lst3 = [[OP_OR], [OP_AND, ('a', '= 10')], [('b', '> 0'), ('c', '> 0')]]
+    >>> r3 = construct_from_list(lst3)
+    >>> print(r3)
+    ( ( b > 0 and c > 0 ) or a = 10 )
+    >>> lst4 = [[('health', '> 0')]]
+    >>> r4 = construct_from_list(lst4)
+    >>> print(r4)
+    health > 0
+    """
+    begin = values[0][0]
+    if begin not in OPERATORS:
+        return Rule(begin[0], [], begin[1])
     q = Queue()
+    rule = Rule(begin, [], None)
     for subtree in values[1]:
-        q.enqueue((subtree, tree))
+        q.enqueue((subtree, rule))
     index = 2
     while not q.is_empty():
         p = q.dequeue()
-        sub = Rule(p[0], [])
-        p[1].append(sub)
         if p[0] in OPERATORS:
+            sub = Rule(p[0], [], None)
             for subtree in values[index]:
                 q.enqueue((subtree, sub))
             index += 1
-    return tree
-    """
-    pass
+        else:
+            sub = Rule(p[0][0], [], p[0][1])
+        p[1].append(sub)
 
+    return rule

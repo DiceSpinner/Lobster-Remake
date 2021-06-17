@@ -3,7 +3,7 @@ class EmptyStackError(Exception):
 
     def __str__(self) -> str:
         """ Return a string representation of this error. """
-        return 'Error! Called pop on an empty stack.'
+        return 'Called pop on an empty stack.'
 
 
 class IllegalConditionalOperatorError(Exception):
@@ -11,5 +11,15 @@ class IllegalConditionalOperatorError(Exception):
 
     def __str__(self) -> str:
         """ Return a string representation of this error. """
-        return 'Error! Illegal conditional operator!'
+        return 'Illegal conditional operator!'
 
+
+class NoneConditionError(Exception):
+    """Exception raised when the input condition is None while root
+    is not an operator.
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'The input condition must not be None when the root is' \
+               'not an operator!'
