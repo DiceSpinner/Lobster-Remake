@@ -1,7 +1,134 @@
+import math
+
 import pygame
-from physics import *
+from effect import *
 from typing import Tuple, Union, List
+from particles import Particle, Block, Creature
+from positional import Movable
+from bool_expr import BoolExpr
+from predefined_particle import PredefinedParticle
+from settings import *
 import os
+
+
+class GameMap:
+    """
+    Description: Game map object
+
+    === Public Attributes ===
+    name: name of the map
+    tile_size: the size of each tile in pixels
+    length: length of the map (in tiles)
+    width: width of the map (in tiles)
+    content: content of the map
+    """
+    name: str
+    tile_size: int
+    length: int
+    width: int
+    content: dict[str, Union[List[List[Block]], List[Creature]]]
+
+    def __init__(self, location: str,
+                 look_up: dict[str, PredefinedParticle]) -> None:
+        self.tile_size = TILE_SIZE
+        self.content = {
+            'block': [],
+            'creature': []
+        }
+        with open(location, 'r') as file:
+            lines = file.readlines()
+            info = lines[0].split("_")
+            self.name = info[0]
+            self.length = int(info[1])
+            self.width = int(info[2])
+
+            rows = lines[1:]
+            for row in rows:
+                self.content['block'].append([])
+                for col in row:
+                    pre_p = look_up[col]
+                    particle_class = globals()[pre_p.info['class']]
+                    self.content['block'].append(particle_class(look_up))
+
+
+class Camera(Movable):
+    """
+    Camera used to display player/particle movements
+
+    === Public Attributes ===
+    - game_maps: game maps this camera operates on
+    - screen: the screen to be displayed on
+    - size: size of the camera in pixels
+    - particle: the particle to be focused on
+    - max_x: max x-coordinate of the camera on the current map
+    - max_y: max y-coordinate of the camera on the current map
+    - min_x: minimum y-coordinate of the camera on the current map
+    - min_y: minimum y-coordinate of the camera on the current map
+    """
+    game_maps: dict[str, GameMap]
+    screen: pygame.Surface
+    size: Tuple[int, int]
+    particle: Particle
+    max_x: int
+    max_y: int
+    min_x: int
+    min_y: int
+
+    def __init__(self, pos: dict[str, float], screen: pygame.Surface,
+                 size: Tuple[int, int],
+                 game_maps: List[GameMap]) -> None:
+        Movable.__init__(self, pos)
+        self.game_maps = {}
+        for m in game_maps:
+            self.game_maps[m.name] = m
+        self.screen = screen
+        self.size = size
+        self.min_x = 0
+        self.min_y = 0
+        current_map = self.game_maps[self.map_name]
+        tile_size = current_map.tile_size
+        self.max_x = current_map.length * tile_size - self.size[0]
+        self.max_y = current_map.width * tile_size - self.size[1]
+
+    def sync(self):
+        """
+        Synchronize the position of this camera with the particle
+        """
+        self.map_name = self.particle.map_name
+        current_map = self.game_maps[self.map_name]
+        tile_size = current_map.tile_size
+        self.max_x = current_map.length * tile_size - self.size[0]
+        self.max_y = current_map.width * tile_size - self.size[1]
+
+    def display(self):
+        """ Display the content onto the screen
+        """
+        current_map = self.game_maps[self.map_name]
+        start_x = self.x - (self.x - 1) % TILE_SIZE
+        start_y = self.y - (self.y - 1) % TILE_SIZE
+        for i in range(self.size[0] + 1):
+            for j in range(self.size[1] + 1):
+                display_x = start_x - self.x
+                display_y = start_y - self.y
+                block_x = int(start_x // TILE_SIZE)
+                block_y = int(start_y // TILE_SIZE)
+                current_map.content['block'][block_x][block_y].display(
+                    self.screen, (display_x, display_y))
+
+    def adjust_position(self):
+        """
+        Adjust the position of the camera if it reaches the boarder of the map
+        """
+        self.x = self.particle.x
+        self.y = self.particle.y
+        if self.x > self.max_x:
+            self.x = self.max_x
+        if self.x < self.min_x:
+            self.x = self.min_x
+        if self.y > self.max_y:
+            self.y = self.max_y
+        if self.y < self.min_y:
+            self.y = self.min_y
 
 
 class Level:
@@ -10,103 +137,130 @@ class Level:
 
     === Public Attributes ===
     difficulty: difficulty of the level
+    goal: The goal of the level
 
     === Private Attributes ===
     _asset: Loaded assets of the game
-    _asset_location: The locations of game assets
-    _physics: Sets of physics rules supported by this level
+    _asset_name: The locations of game assets
+    _game_maps: Loaded game maps, accessed by their names
+    _cameras: Cameras for this level
+    _initialized: Whether the level has been initialized
 
     === Representation Invariants ===
     - difficulty must be an integer from 0 - 3
     """
     difficulty: int
+    goal: BoolExpr
+    _game_maps: dict[str, GameMap]
+    _cameras: dict[str, Camera]
     _asset: dict[str, dict[str, Union[pygame.Surface, pygame.mixer.Sound, str]]]
     _asset_location: List[str]
+    _initialized: bool
 
-    def __init__(self, asset: [str]):
-        self._asset_location = asset
+    def __init__(self, asset: List[str]) -> None:
+        self._asset_name = asset
+        self.difficulty = 0  # default difficulty
+        self._initialized = False
 
     def _load_assets(self) -> None:
         sound_format = ['wav']
         image_format = ['png', 'jpg', 'gif', 'bmp', 'tif']
         music_format = ['mp3', 'mp4']
-        for location in self._asset_location:
+        map_format = ['txt']
+
+        # load in predefined particles
+        look_up = {}
+        with open('predefined-particles.txt', 'r') as file:
+            for line in file:
+                p = PredefinedParticle(line)
+                look_up[p.info['name']] = p
+
+        for location in self._asset_name:
             data = location.split('.')
             suffix = data[1]
+            # data[0]: name of the file without suffix
             if suffix in sound_format:
                 self._asset['sound'][data[0]] = pygame.mixer.Sound(location)
             elif suffix in image_format:
                 self._asset['image'][data[0]] = pygame.image.load(location)
             elif suffix in music_format:
                 self._asset['music'][data[0]] = data[1]
+            elif suffix in map_format:
+                m = GameMap(location, look_up)
 
-    def run(self, screen: pygame.Surface, difficulty: int):
+    def run(self, screen: pygame.Surface, difficulty=0):
         """
         Run the level with the given setting
         """
-        running = True
-        while running:
-            a = 1
+        if not self._initialized:
+            self._load_assets()
+            self._initialized = True
+            self.difficulty = difficulty
+
+    def exit(self):
+        """
+        Release memory of loaded resources and exit the level
+        """
+        self.difficulty = 0  # reset difficulty
+        del self._asset
 
 
 class Game:
     """
     Description:
-        A reusable game class
+        A game object representing the game the player is playing
 
     === Private Attributes ===
         _screen: Screen of the game that gets displayed to the player
         _levels: Levels of this game
-        _file: Path to the game files
-        _base_dir: Base directory of the game
+        _frame_rate: Frame rate of the game
+        _level_selecting: whether the game is on title screen
+        _level_running: whether the game is running on a level
     """
-    _base_dir: str
     _screen: pygame.Surface
     _levels: List[Level]
-    _file: str
-
-    def __init__(self, file: str) -> None:
-        self._file = file
+    _frame_rate: int
+    _level_selecting: bool
+    _level_running: bool
 
     def start(self) -> None:
         """
         Initialize the engine and start the game.
         """
-        os.chdir(self._file)
+        self._level_selecting = True
+        self._level_running = False
         pygame.init()
         pygame.mixer.init()
-        with open('asset_location.txt', 'r+') as game_file:
-            setting = {}
-            for line in game_file:
-                line = line.split(':')
-                setting[line[0]] = line[1]
-            os.chdir(setting['name'])
-            self._base_dir = os.getcwd()
-            self._apply_settings(setting)
-            self._load_level(setting['levels'])
+        self._apply_settings()
+        self._load_level()
+        self.run()
 
-    def _apply_settings(self, setting: dict[str, str]) -> None:
+    def _apply_settings(self) -> None:
         """
         Apply game gui settings
         """
-        pygame.display.set_icon(pygame.image.load(setting['icon']))
-        size = setting['screen_size'].split(',')
-        size = (int(size[0]), int(size[1]))
-        self._screen = pygame.display.set_mode(size)
-        pygame.display.set_caption(setting['name'])
+        pygame.display.set_icon(ICON)
+        self._screen = pygame.display.set_mode(SCREEN_SIZE)
+        pygame.display.set_caption(CAPTION)
+        self.frame_rate = FPS
 
-    def _load_level(self, path: str) -> None:
+    def _load_level(self) -> None:
         """
         Load levels from the "Levels" folder into the game.
         """
-        os.chdir(path)
-        levels = os.listdir()
+        levels = os.listdir("Levels")
         for lev in levels:
             with open(lev, 'r+') as level_file:
-                self._levels.append(self._read_level(lev))
+                self._levels.append(Level(level_file.readlines()))
 
-    def _read_level(self, lev) -> Level:
-        pass
-
-    def display_menu(self):
+    def run(self) -> None:
+        clock = pygame.time.Clock()
+        running = True
+        while running:
+            clock.tick(self.frame_rate)
+            if self._level_selecting:
+                pass
+            elif self._level_running:
+                pass
+            pygame.display.flip()
         return

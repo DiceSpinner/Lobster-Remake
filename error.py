@@ -23,3 +23,22 @@ class NoneConditionError(Exception):
         """ Return a string representation of this error. """
         return 'The input condition must not be None when the root is' \
                'not an operator!'
+
+
+class EffectSubjectError(Exception):
+    """Exception raised when trying to apply an effect on a particle that's
+    not its subject.
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'The particle being applied by this effect must be its subject.'
+
+
+class UnknownTypeError:
+    """Exception raised when receiving unexpected input data type.
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'Unknown datatype.'

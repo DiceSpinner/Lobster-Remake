@@ -1,0 +1,2 @@
+W Block diameter_int_64 shape_str_square texture_str_W-64
+P Block diameter_int_0 shape_str_square texture_str_P-64
