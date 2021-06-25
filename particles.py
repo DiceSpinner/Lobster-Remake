@@ -131,6 +131,21 @@ class Creature(Entity, Movable):
         Creature.creature_group.pop(self, None)
 
 
+class Player(Creature):
+    """
+
+    """
+    player_group = {}
+
+    def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
+        Creature.__init__(self, info)
+        Player.player_group[self.id] = self
+
+    def remove(self):
+        Creature.remove(self)
+        Player.player_group.pop(self, None)
+
+
 class Block(Entity):
     """
 

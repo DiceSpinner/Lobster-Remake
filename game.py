@@ -3,7 +3,7 @@ import math
 import pygame
 from effect import *
 from typing import Tuple, Union, List
-from particles import Particle, Block, Creature
+from particles import Particle, Block, Creature, Player, Item
 from positional import Movable
 from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
@@ -26,29 +26,43 @@ class GameMap:
     tile_size: int
     length: int
     width: int
-    content: dict[str, Union[List[List[Block]], List[Creature]]]
+    blocks: List[List[Block]]
+    creatures: List[List[List[Creature]]]
+    items: List[List[List[Item]]]
 
-    def __init__(self, location: str,
+    def __init__(self, locations: dict[str, str],
                  look_up: dict[str, PredefinedParticle]) -> None:
         self.tile_size = TILE_SIZE
-        self.content = {
-            'block': [],
-            'creature': []
-        }
-        with open(location, 'r') as file:
-            lines = file.readlines()
-            info = lines[0].split("_")
-            self.name = info[0]
-            self.length = int(info[1])
-            self.width = int(info[2])
-
-            rows = lines[1:]
-            for row in rows:
-                self.content['block'].append([])
-                for col in row:
-                    pre_p = look_up[col]
-                    particle_class = globals()[pre_p.info['class']]
-                    self.content['block'].append(particle_class(look_up))
+        content = ['blocks', 'creatures', 'items']
+        for key in content:
+            with open(locations[key], 'r') as file:
+                lines = file.readlines()
+                if key == 'blocks':
+                    info = lines[0].split("_")
+                    self.name = info[0]
+                    self.length = int(info[1])
+                    self.width = int(info[2])
+                    self.blocks = []
+                    rows = lines[1:]
+                    for i in range(len(rows)):
+                        row = rows[i]
+                        self.blocks.append([])
+                        for col in row:
+                            pre_p = look_up[col]
+                            particle_class = globals()[pre_p.info['class']]
+                            self.blocks[i].append(particle_class(look_up))
+                else:
+                    result = []
+                    for i in range(len(lines)):
+                        line = lines[i]
+                        result.append([])
+                        for j in range(len(line)):
+                            item = line[j]
+                            result[i].append([])
+                            pre_p = look_up[item]
+                            particle_class = globals()[pre_p.info['class']]
+                            result[i][j].append(particle_class(look_up))
+                            setattr(self, key, result)
 
 
 class Camera(Movable):
@@ -67,7 +81,8 @@ class Camera(Movable):
     """
     game_maps: dict[str, GameMap]
     screen: pygame.Surface
-    size: Tuple[int, int]
+    width: int
+    length: int
     particle: Particle
     max_x: int
     max_y: int
@@ -82,13 +97,14 @@ class Camera(Movable):
         for m in game_maps:
             self.game_maps[m.name] = m
         self.screen = screen
-        self.size = size
+        self.length = size[0]
+        self.width = size[1]
         self.min_x = 0
         self.min_y = 0
         current_map = self.game_maps[self.map_name]
         tile_size = current_map.tile_size
-        self.max_x = current_map.length * tile_size - self.size[0]
-        self.max_y = current_map.width * tile_size - self.size[1]
+        self.max_x = current_map.length * tile_size - self.length
+        self.max_y = current_map.width * tile_size - self.width
 
     def sync(self):
         """
@@ -97,22 +113,23 @@ class Camera(Movable):
         self.map_name = self.particle.map_name
         current_map = self.game_maps[self.map_name]
         tile_size = current_map.tile_size
-        self.max_x = current_map.length * tile_size - self.size[0]
-        self.max_y = current_map.width * tile_size - self.size[1]
+        self.max_x = current_map.length * tile_size - self.length
+        self.max_y = current_map.width * tile_size - self.width
 
     def display(self):
         """ Display the content onto the screen
         """
         current_map = self.game_maps[self.map_name]
-        start_x = self.x - (self.x - 1) % TILE_SIZE
-        start_y = self.y - (self.y - 1) % TILE_SIZE
-        for i in range(self.size[0] + 1):
-            for j in range(self.size[1] + 1):
-                display_x = start_x - self.x
-                display_y = start_y - self.y
-                block_x = int(start_x // TILE_SIZE)
-                block_y = int(start_y // TILE_SIZE)
-                current_map.content['block'][block_x][block_y].display(
+        start_col = self.x // TILE_SIZE
+        start_row = self.y // TILE_SIZE
+        end_col = math.ceil(self.x / TILE_SIZE) + self.length
+        end_row = math.ceil(self.y / TILE_SIZE) + self.width
+        for i in range(start_row, end_row):
+            for j in range(start_col, end_col):
+                tile = current_map.content['block'][i][j]
+                display_x = tile.x - self.x
+                display_y = tile.y - self.y
+                tile.display(
                     self.screen, (display_x, display_y))
 
     def adjust_position(self):
@@ -143,7 +160,7 @@ class Level:
     _asset: Loaded assets of the game
     _asset_name: The locations of game assets
     _game_maps: Loaded game maps, accessed by their names
-    _cameras: Cameras for this level
+    _camera: Camera for this level
     _initialized: Whether the level has been initialized
 
     === Representation Invariants ===
@@ -152,7 +169,7 @@ class Level:
     difficulty: int
     goal: BoolExpr
     _game_maps: dict[str, GameMap]
-    _cameras: dict[str, Camera]
+    _camera: Camera
     _asset: dict[str, dict[str, Union[pygame.Surface, pygame.mixer.Sound, str]]]
     _asset_location: List[str]
     _initialized: bool
