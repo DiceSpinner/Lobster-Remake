@@ -1,6 +1,5 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Callable
 from error import EmptyStackError
-
 
 # Stack
 class Stack:
@@ -50,6 +49,7 @@ class Stack:
         else:
             return self._items.pop()
 
+
 # Queue
 class Queue:
     """
@@ -97,3 +97,33 @@ class Queue:
             return None
         else:
             return self._items.pop(0)
+
+
+class PriorityQueue:
+    """
+    Description: A queue of items sorted by their priorities, items with higher priority will be popped first
+
+    === Private attributes ===
+    _items: Items stored in this queue. The first item is being represented by
+    the first item in the list.
+    _comparator: The callable function used to sort items
+    """
+    _items: List[Any]
+    _comparator: Callable[[Any, Any], bool]
+
+    def __init__(self, comparator: Callable) -> None:
+        self._comparator = comparator
+        self._items = []
+
+    def enqueue(self, item: Any) -> None:
+        for i in self._items:
+            if not self._comparator(item, i):
+                self._items.insert(self._items.index(i), item)
+                return
+        self._items.append(item)
+
+    def dequeue(self) -> Any:
+        return self._items.pop()
+
+    def is_empty(self) -> bool:
+        return len(self._items) == 0

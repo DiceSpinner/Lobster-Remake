@@ -121,6 +121,8 @@ class Creature(Entity, Movable):
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         Entity.__init__(self, info)
         Creature.creature_group[self.id] = self
+        if "display_priority" not in info:
+            self.display_priority = 2
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
