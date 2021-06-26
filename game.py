@@ -46,7 +46,7 @@ class GameMap:
             self.entities = []
             for i in range(len(rows)):
                 pos_y = i * TILE_SIZE
-                row = rows[i]
+                row = rows[i].rstrip()
                 self.blocks.append([])
                 self.entities.append([])
                 row = row.split("	")
@@ -60,11 +60,24 @@ class GameMap:
                         pre_p.info['y'] = pos_y
                         pre_p.info['map_name'] = self.name
                         particle_class = globals()[pre_p.info['class']]
-                        par = particle_class(look_up)
+                        par = particle_class(pre_p.info)
                         if isinstance(par, Block):
                             self.blocks[i].append(par)
                         else:
                             self.entities[i][j].append(par)
+
+    def update_content(self):
+        """ Update the location of entities """
+        for i in range(len(self.entities)):
+            row = self.entities[i]
+            for j in range(len(row)):
+                col = row[j]
+                for k in range(len(col)):
+                    entity = col[k]
+                    entity.update_position()
+                    self.entities[i][j].remove(entity)
+                    self.entities[entity.y // TILE_SIZE][
+                        entity.x // TILE_SIZE].append(entity)
 
 
 class Camera(Movable):
@@ -92,23 +105,23 @@ class Camera(Movable):
 
     def __init__(self, particle: Particle,
                  length: int, width: int,
-                 game_maps: List[GameMap]) -> None:
-        Movable.__init__(self, {})
+                 game_maps: dict[str, GameMap]) -> None:
+        Movable.__init__(self, {"map_name": particle.map_name})
         self.particle = particle
-        self.sync()
-        self.game_maps = {}
-        for m in game_maps:
-            self.game_maps[m.name] = m
+        self.game_maps = game_maps
         self.width = width
         self.length = length
         self.min_x = 0
         self.min_y = 0
+        self.sync()
 
     def sync(self):
         """
         Synchronize the position of this camera with the particle
         """
         self.map_name = self.particle.map_name
+        self.x = self.particle.x - self.length / 2
+        self.y = self.particle.y - self.width / 2
         current_map = self.game_maps[self.map_name]
         tile_size = current_map.tile_size
         self.max_x = current_map.length * tile_size - self.length
@@ -123,28 +136,28 @@ class Camera(Movable):
             self.y = self.min_y
 
     def display(self, screen: pygame.Surface):
-        """ Display the content onto the screen
+        """ Display the content onto the screen by their priority
         """
         current_map = self.game_maps[self.map_name]
         displaying = {}
-        start_row = self.x // TILE_SIZE
-        end_row = math.ceil((self.x + self.length) / TILE_SIZE)
-        start_col = self.y // TILE_SIZE
-        end_col = math.ceil((self.y + self.width) / TILE_SIZE)
+        start_row = int(self.x // TILE_SIZE)
+        end_row = int(math.ceil((self.x + self.length) / TILE_SIZE))
+        start_col = int(self.y // TILE_SIZE)
+        end_col = int(math.ceil((self.y + self.width) / TILE_SIZE))
         for i in range(start_row, end_row):
             for j in range(start_col, end_col):
                 tile = current_map.blocks[j][i]
                 items = [tile] + current_map.entities[j][i]
                 for item in items:
-                    display_x = item.x - self.x
-                    display_y = item.y - self.y
+                    display_x = round(item.x - self.x)
+                    display_y = round(item.y - self.y)
                     displaying[item.id] = (display_x, display_y)
         queue = PriorityQueue(compare_by_display_priority)
         for key in displaying:
             queue.enqueue(Particle.particle_group[key])
         while not queue.is_empty():
             item = queue.dequeue()
-            item.display(displaying[item.id])
+            item.display(screen, displaying[item.id])
 
 
 class Level:
@@ -154,11 +167,13 @@ class Level:
     === Public Attributes ===
     difficulty: difficulty of the level
     goal: The goal of the level
+    running: Whether this level is running
 
     === Private Attributes ===
     _asset: Loaded assets of the game
     _asset_name: The locations of game assets
     _game_maps: Loaded game maps, accessed by their names
+    _map_names: Name of the maps
     _camera: Camera for this level
     _initialized: Whether the level has been initialized
 
@@ -169,57 +184,85 @@ class Level:
     goal: BoolExpr
     _game_maps: dict[str, GameMap]
     _camera: Camera
-    _asset: dict[str, dict[str, Union[pygame.Surface, pygame.mixer.Sound, str]]]
-    _asset_location: List[str]
+    _map_names: List[str]
     _initialized: bool
+    running: bool
 
     def __init__(self, asset: List[str]) -> None:
-        self._asset_name = asset
+        for line in asset:
+            line = line.split('=')
+            if line[0] == 'maps':
+                self._map_names = line[1].split(':')
         self.difficulty = 0  # default difficulty
         self._initialized = False
+        self._game_maps = {}
+        self.running = False
 
-    def _load_assets(self) -> None:
-        sound_format = ['wav']
-        image_format = ['png', 'jpg', 'gif', 'bmp', 'tif']
-        music_format = ['mp3', 'mp4']
-        map_format = ['txt']
-
+    def _load_maps(self) -> None:
         # load in predefined particles
         look_up = {}
         with open('predefined-particles.txt', 'r') as file:
             for line in file:
                 p = PredefinedParticle(line)
-                look_up[p.info['particle_name']] = p
+                look_up[p.info['name']] = p
 
-        for location in self._asset_name:
-            data = location.split('.')
-            suffix = data[1]
-            # data[0]: name of the file without suffix
-            if suffix in sound_format:
-                self._asset['sound'][data[0]] = pygame.mixer.Sound(location)
-            elif suffix in image_format:
-                self._asset['image'][data[0]] = pygame.image.load(location)
-            elif suffix in music_format:
-                self._asset['music'][data[0]] = data[1]
-            elif suffix in map_format:
-                m = GameMap(location, look_up)
+        for m in self._map_names:
+            name = os.path.join("assets/maps", m + ".txt")
+            game_map = GameMap(name, look_up)
+            self._game_maps[game_map.name] = game_map
 
     def run(self, screen: pygame.Surface, difficulty=0):
         """
         Run the level with the given setting
         """
         if not self._initialized:
-            self._load_assets()
+            self._load_maps()
             self._initialized = True
+            self.running = True
             self.difficulty = difficulty
-            self._camera = Camera()
+            player_key = list(Player.player_group)[0]
+            player = Player.player_group[player_key]
+            self._camera = Camera(player,
+                                  screen.get_height(), screen.get_width(),
+                                  self._game_maps)
+        player_key = list(Player.player_group)[0]
+        player = Player.player_group[player_key]
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_w:
+                    player.vy = -5
+                elif event.key == pygame.K_a:
+                    player.vx = -5
+                elif event.key == pygame.K_s:
+                    player.vy = 5
+                elif event.key == pygame.K_d:
+                    player.vx = 5
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_w:
+                    player.vy = 0
+                elif event.key == pygame.K_a:
+                    player.vx = 0
+                elif event.key == pygame.K_s:
+                    player.vy = 0
+                elif event.key == pygame.K_d:
+                    player.vx = 0
+
+        for game_map in self._game_maps:
+            game_map = self._game_maps[game_map]
+            game_map.update_content()
+
+        self._camera.sync()
+        self._camera.display(screen)
 
     def exit(self):
         """
         Release memory of loaded resources and exit the level
         """
         self.difficulty = 0  # reset difficulty
-        del self._asset
+        self._game_maps = {}
 
 
 class Game:
@@ -252,6 +295,7 @@ class Game:
         pygame.init()
         pygame.mixer.init()
         self._apply_settings()
+        self._levels = []
         self._load_level()
         self.run()
 
@@ -259,7 +303,7 @@ class Game:
         """
         Apply game gui settings
         """
-        pygame.display.set_icon(ICON)
+        pygame.display.set_icon(pygame.image.load(os.path.join("assets", ICON)))
         self._screen = pygame.display.set_mode(SCREEN_SIZE)
         pygame.display.set_caption(CAPTION)
         self.frame_rate = FPS
@@ -270,7 +314,7 @@ class Game:
         """
         levels = os.listdir("Levels")
         for lev in levels:
-            with open(lev, 'r+') as level_file:
+            with open(os.path.join('Levels', lev), 'r+') as level_file:
                 self._levels.append(Level(level_file.readlines()))
 
     def run(self) -> None:
@@ -278,17 +322,18 @@ class Game:
         running = True
         while running:
             clock.tick(self.frame_rate)
+            self._screen.fill((0, 0, 0))
             if self._level_selecting:
                 self._selected_level = 0
                 self._level_selecting = False
                 self._level_running = True
-                pass
             elif self._level_running:
                 level = self._levels[self._selected_level]
                 level.run(self._screen)
-                pass
+                if not level.running:
+                    running = False
             pygame.display.flip()
-        return
+        pygame.quit()
 
 
 def compare_by_display_priority(p1: Particle, p2: Particle) -> bool:

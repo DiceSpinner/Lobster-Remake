@@ -1,4 +1,4 @@
-SCREEN_SIZE = (1024, 1024)
+SCREEN_SIZE = (800, 800)
 ICON = 'Lobster.png'
 CAPTION = 'Lobster-Remake'
 FPS = 60

@@ -15,6 +15,9 @@ class Positional:
 
     def __init__(self, info: dict[str, Union[str, float]]) -> None:
         attr = ['x', 'y', 'map_name']
+        for item in attr:
+            if item not in info:
+                info[item] = 0
         for item in info:
             if item in attr:
                 setattr(self, item, info[item])
@@ -44,7 +47,7 @@ class Movable(Positional):
             if item in attr:
                 setattr(self, item, info[item])
 
-    def update(self) -> None:
+    def update_position(self) -> None:
         """
         Update the object's position.
         """

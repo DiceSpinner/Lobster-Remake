@@ -4,6 +4,7 @@ import pygame
 from typing import List, Any, Tuple, Union
 from positional import Positional, Movable
 from settings import TILE_SIZE, SQUARE, CIRCLE, SHAPES
+import os
 
 
 class Particle(Positional):
@@ -18,19 +19,22 @@ class Particle(Positional):
     display_priority: The display priority of this particle, particles with
         the highest priority will be displayed on top of the screen
 
+    name: Name of this particle (displayed in map txt file)
     """
     ID = 0
     particle_group = {}
     id: int
     display_priority: int
     texture: pygame.Surface
+    name: str
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         default = {
             'display_priority': 0,
-            'texture': "Lobster.png"
+            'texture': "Lobster-64.png",
+            'name': 'particle'
         }
-        attr = ['display_priority', 'texture']
+        attr = ['display_priority', 'texture', 'name']
         Positional.__init__(self, info)
         self.id = Particle.ID
         Particle.ID += 1
@@ -40,7 +44,8 @@ class Particle(Positional):
         for item in info:
             if item in attr:
                 setattr(self, item, info[item])
-        self.texture = pygame.image.load(self.texture)
+        self.texture = pygame.image.load(
+            os.path.join("assets/images", self.texture))
         Particle.particle_group[self.id] = self
 
     def display(self, screen: pygame.Surface,
@@ -50,6 +55,9 @@ class Particle(Positional):
     def remove(self):
         """ Remove this particle from the game """
         Particle.particle_group.pop(self.id, None)
+
+    def __str__(self):
+        return self.name
 
 
 class Entity(Particle):
@@ -119,14 +127,16 @@ class Creature(Entity, Movable):
     creature_group = {}
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
-        Entity.__init__(self, info)
-        Creature.creature_group[self.id] = self
         if "display_priority" not in info:
-            self.display_priority = 2
+            info['display_priority'] = 2
+        Entity.__init__(self, info)
+        Movable.__init__(self, info)
+        Creature.creature_group[self.id] = self
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
-        screen.blit(self.texture, [location[0], location[1]])
+        radius = int(self.diameter // 2)
+        screen.blit(self.texture, [location[0] - radius, location[1] - radius])
 
     def remove(self):
         Particle.remove(self)
@@ -142,6 +152,8 @@ class Player(Creature):
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         Creature.__init__(self, info)
         Player.player_group[self.id] = self
+        self.texture = pygame.transform.scale(self.texture, (self.diameter,
+                                                             self.diameter))
 
     def remove(self):
         Creature.remove(self)
@@ -152,13 +164,18 @@ class Block(Entity):
     """
 
     """
+    def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
+        Entity.__init__(self, info)
+        self.texture = pygame.transform.scale(self.texture, (TILE_SIZE,
+                                                             TILE_SIZE))
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[float, float]) -> None:
         screen.blit(self.texture, [location[0], location[1]])
+
         dark = pygame.Surface((self.diameter,
                                self.diameter))
         dark.fill((0, 0, 0))
         dark.set_alpha(255 - self.brightness)
-        screen.blit(dark, [location[0], location[1]])
+        # screen.blit(dark, [location[0], location[1]])
 

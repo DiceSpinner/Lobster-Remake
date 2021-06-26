@@ -25,16 +25,16 @@ class PredefinedParticle:
         content = content.split(' ')
 
         # separate class name and its fields
-        particle_name = content[0]
-        class_name = content[1]
+        particle_name = content[0].rstrip()
+        class_name = content[1].rstrip()
         fields = content[2:]
 
-        self.info['particle_name'] = particle_name
+        self.info['name'] = particle_name
         self.info['class'] = class_name
 
         # unpack the fields
         for field in fields:
-            field = field.split('_')
+            field = field.rstrip().split('_')
             attr = field[0]
             data_type = field[1]
             value = field[2]

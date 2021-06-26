@@ -18,4 +18,4 @@ W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-X	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W
+W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W

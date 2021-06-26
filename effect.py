@@ -1,7 +1,7 @@
 import pygame
 from typing import List, Any, Tuple, Union
-from game_objects import Particle
-from rule import Rule, construct_from_list
+from particles import Particle
+from bool_expr import BoolExpr, construct_from_list
 
 
 class Effect:
@@ -12,7 +12,7 @@ class Effect:
     === Public Attributes ===
     rules: A Rule object which indicates the subject of this effect
     """
-    subjects: Rule
+    subjects: BoolExpr
 
     def apply_effect(self, particle: Particle, ) -> Any:
         """
