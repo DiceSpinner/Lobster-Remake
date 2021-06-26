@@ -121,6 +121,8 @@ class Creature(Entity, Movable):
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         Entity.__init__(self, info)
         Creature.creature_group[self.id] = self
+        if "display_priority" not in info:
+            self.display_priority = 2
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
@@ -129,6 +131,21 @@ class Creature(Entity, Movable):
     def remove(self):
         Particle.remove(self)
         Creature.creature_group.pop(self, None)
+
+
+class Player(Creature):
+    """
+
+    """
+    player_group = {}
+
+    def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
+        Creature.__init__(self, info)
+        Player.player_group[self.id] = self
+
+    def remove(self):
+        Creature.remove(self)
+        Player.player_group.pop(self, None)
 
 
 class Block(Entity):
