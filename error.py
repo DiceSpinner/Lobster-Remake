@@ -42,3 +42,12 @@ class UnknownTypeError:
     def __str__(self) -> str:
         """ Return a string representation of this error. """
         return 'Unknown datatype.'
+
+
+class UnknownShapeError:
+    """Exception raised when receiving unexpected shape of the object.
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'Object shape unknown.'

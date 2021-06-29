@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, List
 from error import UnknownTypeError
 
 
@@ -12,7 +12,7 @@ class PredefinedParticle:
         - Particle: display_priority, texture
         - Creature/Block: diameter, brightness, light_power, health, shape
     """
-    info: dict[str, Union[str, int, float, bool]]
+    info: dict[str, Union[str, int, float, bool, List]]
 
     def __init__(self, content: str) -> None:
         """ Construct the dictionary representation of the particle with the
@@ -46,6 +46,8 @@ class PredefinedParticle:
                 self.info[attr] = bool(value)
             elif data_type == 'str':
                 self.info[attr] = value
+            elif data_type == 'eval':
+                self.info[attr] = eval(value)
             else:
                 raise UnknownTypeError
 

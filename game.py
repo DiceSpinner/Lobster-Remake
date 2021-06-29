@@ -2,13 +2,14 @@ import math
 
 import pygame
 from effect import *
-from typing import Tuple, Union, List
+from typing import Tuple, Union, List, TypeVar, Optional
 from particles import Particle, Block, Creature, Item, Player
-from positional import Movable
+from utilities import Positional, Movable, Collidable
 from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
 from settings import *
 from data_structures import PriorityQueue
+from math_formula import segment_intersection, line_circle_intersection
 import os
 
 
@@ -74,13 +75,41 @@ class GameMap:
                 col = row[j]
                 for k in range(len(col)):
                     entity = col[k]
-                    entity.update_position()
-                    self.entities[i][j].remove(entity)
-                    self.entities[entity.y // TILE_SIZE][
-                        entity.x // TILE_SIZE].append(entity)
+                    if isinstance(entity, Movable):
+                        entity.update_position()
+                        self.entity_collision_check([i, j, k])
+                        self.entities[i][j].remove(entity)
+                        self.entities[int(entity.y // TILE_SIZE)][
+                            int(entity.x // TILE_SIZE)].append(entity)
+
+    def entity_collision_check(self, index: List[int]) -> None:
+        row = index[0]
+        col = index[1]
+        k = index[2]
+        start_row = row - 1
+        start_col = col - 1
+        end_row = row + 1
+        end_col = col + 1
+        entity = self.entities[row][col][k]
+        if start_row < 0:
+            start_row = 0
+        if start_col < 0:
+            start_col = 0
+        if end_row >= len(self.entities):
+            end_row = len(self.entities) - 1
+        if end_col >= len(self.entities[end_row]):
+            end_col = len(self.entities[end_row]) - 1
+        for i in range(start_row, end_row + 1):
+            for j in range(start_col, end_col + 1):
+                tile = self.blocks[i][j]
+                if entity.detect_collision(tile):
+                    # print('Collide with row:' + str(i), "col:" + str(j))
+                    if isinstance(entity, Movable) and (not entity.vx == 0 or
+                                                        not entity.vy == 0):
+                        correct_position(entity, tile)
 
 
-class Camera(Movable):
+class Camera(Positional):
     """
     Camera used to display player/particle movements
 
@@ -106,7 +135,7 @@ class Camera(Movable):
     def __init__(self, particle: Particle,
                  length: int, width: int,
                  game_maps: dict[str, GameMap]) -> None:
-        Movable.__init__(self, {"map_name": particle.map_name})
+        Positional.__init__(self, {"map_name": particle.map_name})
         self.particle = particle
         self.game_maps = game_maps
         self.width = width
@@ -228,27 +257,14 @@ class Level:
         player_key = list(Player.player_group)[0]
         player = Player.player_group[player_key]
 
+        player_input = []
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_w:
-                    player.vy = -5
-                elif event.key == pygame.K_a:
-                    player.vx = -5
-                elif event.key == pygame.K_s:
-                    player.vy = 5
-                elif event.key == pygame.K_d:
-                    player.vx = 5
-            elif event.type == pygame.KEYUP:
-                if event.key == pygame.K_w:
-                    player.vy = 0
-                elif event.key == pygame.K_a:
-                    player.vx = 0
-                elif event.key == pygame.K_s:
-                    player.vy = 0
-                elif event.key == pygame.K_d:
-                    player.vx = 0
+            elif event.type == pygame.KEYUP or event.type == pygame.KEYDOWN:
+                player_input.append(event)
+        for creature in Creature.creature_group:
+            Creature.creature_group[creature].action(player_input)
 
         for game_map in self._game_maps:
             game_map = self._game_maps[game_map]
@@ -339,3 +355,96 @@ class Game:
 def compare_by_display_priority(p1: Particle, p2: Particle) -> bool:
     """ Sort by non-decreasing order """
     return p2.display_priority > p1.display_priority
+
+
+def correct_position(c1: Collidable, c2: Collidable) -> None:
+    """ Correct the position of c1 so it doesn't collide with c2 "
+
+    Pre-condition: c1 implements the Movable interface
+    """
+    if c1.shape == SQUARE and c2.shape == SQUARE:
+        _square_square(c1, c2)
+        return
+    if c1.shape == CIRCLE and c2.shape == SQUARE:
+        _circle_square(c1, c2)
+        return
+    if c1.shape == SQUARE and c2.shape == CIRCLE:
+        pass
+
+
+def _square_square(c1: Collidable, c2: Collidable) -> None:
+    corner_upleft = (c1.x, c1.y)
+    corner_upright = (c1.x + c1.diameter, c1.y)
+    corner_bottomleft = (c1.x, c1.y + c1.diameter)
+    corner_bottomright = (c1.x + c1.diameter, c1.y + c1.diameter)
+
+    corners = [corner_upleft, corner_upright, corner_bottomleft,
+               corner_bottomright]
+    collided = []
+
+    for corner in corners:
+        if c2.x <= corner[0] <= c2.x + c2.diameter and c2.y <= corner[
+             1] <= c2.y + c2.diameter:
+            collided.append(corner)
+    left = ((c2.x - 1, c2.y - 1), (c2.x - 1, c2.y + c2.diameter + 1))
+    up = ((c2.x - 1, c2.y - 1), (c2.x + 1 + c2.diameter, c2.y - 1))
+    right = ((c2.x + 1 + c2.diameter, c2.y - 1), (c2.x + c2.diameter + 1,
+                                                  c2.y + c2.diameter + 1))
+    down = ((c2.x - 1, c2.y + c2.diameter + 1), (c2.x + 1 + c2.diameter,
+                                                 c2.y + c2.diameter + 1))
+    sides = [left, up, right, down]
+    previous = []
+    for i in range(len(collided)):
+        corner = collided[i]
+        previous.append((corner[0] - c1.vx, corner[1] - c1.vy))
+    for i in range(len(collided)):
+        corner = collided[i]
+        for side in sides:
+            poi = segment_intersection(side, (corner, previous[i]))
+            if poi is not None:
+                x = poi[0] - corner[0]
+                y = poi[1] - corner[1]
+                c1.x += x
+                c1.y += y
+                for c in range(len(collided)):
+                    co = collided[c]
+                    collided[c] = (co[0] + x, co[1] + y)
+
+
+def _circle_square(c1: Collidable, c2: Collidable) -> None:
+    centre_x = c1.x + c1.diameter / 2
+    centre_y = c1.y + c1.diameter / 2
+    tl = (c2.x - 1, c2.y - 1)
+    tr = (c2.x + c2.diameter + 1, c2.y - 1)
+    br = (c2.x + c2.diameter + 1, c2.y + c2.diameter + 1)
+    bl = (c2.x - 1, c2.y + c2.diameter + 1)
+    p1 = None
+    p2 = None
+    if centre_x <= tl[0] and centre_y <= tl[1]:
+        p1 = tl
+        p2 = (p1[0] - c1.vx, p1[1] - c1.vy)
+    elif centre_x >= tr[0] and centre_y <= tr[1]:
+        p1 = tr
+        p2 = (p1[0] - c1.vx, p1[1] - c1.vy)
+    elif centre_x >= br[0] and centre_y >= br[1]:
+        p1 = br
+        p2 = (p1[0] - c1.vx, p1[1] - c1.vy)
+    elif centre_x <= bl[0] and centre_y >= bl[1]:
+        p1 = bl
+        p2 = (p1[0] - c1.vx, p1[1] - c1.vy)
+    if p1 is not None and p2 is not None:
+        poi = line_circle_intersection((p1, p2), (c1.x, c1.y), c1.diameter)
+        print(poi)
+        for point in poi:
+            if c2.x <= point[0] <= c2.x + c2.diameter and \
+                    c2.y <= point[1] <= c2.y + c2.diameter:
+                offset_x = p1[0] - point[0]
+                offset_y = p1[1] - point[1]
+                c1.x += offset_x
+                c1.y += offset_y
+    else:
+        _square_square(c1, c2)
+
+
+def _circle_circle(c1: Collidable, c2: Collidable) -> None:
+    pass

@@ -1,8 +1,8 @@
 from abc import ABC
 
 import pygame
-from typing import List, Any, Tuple, Union
-from positional import Positional, Movable
+from typing import List, Any, Tuple, Union, Optional
+from utilities import Positional, Movable, Collidable, Lightable, Living
 from settings import TILE_SIZE, SQUARE, CIRCLE, SHAPES
 import os
 
@@ -60,62 +60,14 @@ class Particle(Positional):
         return self.name
 
 
-class Entity(Particle):
-    """
-    Description: Particles with collision, lighting and health attributes
-
-    Additional Attributes:
-        shape: Shape of this entity
-        diameter: Physical diameter of this entity
-        light_power: The ability of this entity to produce light
-        brightness: brightness of this entity
-
-    Representation Invariants:
-        diameter >= 0, the particle is non-collidable when diameter = 0
-        shape is one of 'circle', 'rect', 'tri'
-        0<= light_power <= 255 and can only be 0 when this entity is
-            not a light source
-        0<= brightness <= 255
-    """
-    shape: str
-    diameter: int
-    light_power: int
-    brightness: int
-    health: float
-
-    def __init__(self, info: dict[str, Union[str, int, float]]) -> None:
-        Particle.__init__(self, info)
-        default = {
-            'shape': SQUARE,
-            'diameter': TILE_SIZE,
-            'light_power': 0,
-            'brightness': 0,
-            'health': 1
-        }
-
-        for key in default:
-            if key not in info:
-                info[key] = default[key]
-
-        attr = ['shape', 'diameter', 'light_power', 'brightness',
-                'health']
-        for item in info:
-            if item in attr:
-                setattr(self, item, info[item])
-
-    def display(self, screen: pygame.Surface,
-                location: Tuple[int, int]) -> None:
-        raise NotImplementedError
-
-
-class Item(Entity, ABC):
+class Item(Collidable):
     """ Description: An object represents an item in game
 
     """
     pass
 
 
-class Creature(Entity, Movable):
+class Creature(Particle, Collidable, Movable, Living):
     """
     Description: Movable entities
 
@@ -129,14 +81,30 @@ class Creature(Entity, Movable):
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         if "display_priority" not in info:
             info['display_priority'] = 2
-        Entity.__init__(self, info)
+        Particle.__init__(self, info)
+        Collidable.__init__(self, info)
         Movable.__init__(self, info)
         Creature.creature_group[self.id] = self
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
-        radius = int(self.diameter // 2)
-        screen.blit(self.texture, [location[0] - radius, location[1] - radius])
+        screen.blit(self.texture, [location[0], location[1]])
+        dark = pygame.Surface((self.diameter,
+                               self.diameter))
+        dark.fill((0, 0, 0))
+        dark.set_alpha(100)
+        screen.blit(dark, [location[0], location[1]])
+        # pygame.draw.circle(screen, (0, 255, 255), (location[0] + self.diameter // 2, location[1] + self.diameter // 2), self.diameter // 2)
+
+    def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
+        raise NotImplementedError
+
+    def is_dead(self) -> bool:
+        return self.death.eval(vars(self))
+
+    def update_status(self) -> None:
+        if self.is_dead():
+            self.remove()
 
     def remove(self):
         Particle.remove(self)
@@ -155,17 +123,40 @@ class Player(Creature):
         self.texture = pygame.transform.scale(self.texture, (self.diameter,
                                                              self.diameter))
 
+    def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
+        for event in player_input:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_w:
+                    self.vy = -5
+                elif event.key == pygame.K_a:
+                    self.vx = -5
+                elif event.key == pygame.K_s:
+                    self.vy = 5
+                elif event.key == pygame.K_d:
+                    self.vx = 5
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_w:
+                    self.vy = 0
+                elif event.key == pygame.K_a:
+                    self.vx = 0
+                elif event.key == pygame.K_s:
+                    self.vy = 0
+                elif event.key == pygame.K_d:
+                    self.vx = 0
+
     def remove(self):
         Creature.remove(self)
         Player.player_group.pop(self, None)
 
 
-class Block(Entity):
+class Block(Particle, Collidable, Lightable):
     """
 
     """
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
-        Entity.__init__(self, info)
+        Particle.__init__(self, info)
+        Collidable.__init__(self, info)
+        Lightable.__init__(self, info)
         self.texture = pygame.transform.scale(self.texture, (TILE_SIZE,
                                                              TILE_SIZE))
 

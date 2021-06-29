@@ -1,6 +1,7 @@
 from typing import Any, List, Optional, Callable
 from error import EmptyStackError
 
+
 # Stack
 class Stack:
     """
@@ -101,7 +102,8 @@ class Queue:
 
 class PriorityQueue:
     """
-    Description: A queue of items sorted by their priorities, items with higher priority will be popped first
+    Description: A queue of items sorted by their priorities, items with higher
+    priority will be popped first
 
     === Private attributes ===
     _items: Items stored in this queue. The first item is being represented by

@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Union, List, Optional, Dict, Any, Tuple
 from data_structures import Queue
 from error import IllegalConditionalOperatorError, NoneConditionError
-from particles import Particle
 
 OP_AND = 'and'
 OP_OR = 'or'
@@ -36,7 +35,7 @@ class BoolExpr:
     _condition: Union[Tuple[str, Union[int, float]], bool, str]
 
     def __init__(self, root: str, subtrees: List[BoolExpr],
-                 condition: Optional[Union[str, bool]]):
+                 condition: Optional[Union[bool, Tuple[str, str]]]):
         """
         Initialize the BoolExpr with the given root and subtrees, an exception
         will be raised if the input condition is invalid.
@@ -49,7 +48,6 @@ class BoolExpr:
                     raise NoneConditionError
                 if condition[0] not in ['>', '=', '<']:
                     raise IllegalConditionalOperatorError
-                condition = condition.split(' ')
                 value = condition[1]
                 if '.' in value:
                     value = float(value)
@@ -63,10 +61,10 @@ class BoolExpr:
         """
         Returns the string representation of this BoolExpr
 
-        >>> r1 = BoolExpr('health', [], '> 0')
+        >>> r1 = BoolExpr('health', [], ('>', '0'))
         >>> print(r1)
         health > 0
-        >>> r2 = BoolExpr('speed', [], '> 0')
+        >>> r2 = BoolExpr('speed', [], ('>', '0'))
         >>> print(r2)
         speed > 0
         >>> r3 = BoolExpr(OP_AND, [r1, r2], None)
@@ -75,10 +73,10 @@ class BoolExpr:
         >>> r4 = BoolExpr('collidable', [], True)
         >>> print(r4)
         collidable = True
-        >>> r5 = BoolExpr('attack_damage', [], '= 0.5')
+        >>> r5 = BoolExpr('attack_damage', [], ('=', '0.5'))
         >>> print(r5)
         attack_damage = 0.5
-        >>> r6 = BoolExpr('vision', [], '= 6')
+        >>> r6 = BoolExpr('vision', [], ('=', '6'))
         >>> r7 = BoolExpr(OP_NOT, [r6], None)
         >>> print(r7)
         ( not vision = 6 )
@@ -99,60 +97,59 @@ class BoolExpr:
             return '( ' + s + ' )'
         return '( not ' + self._subtrees[0].__str__() + ' )'
 
-    def eval(self, particle: Particle) -> bool:
+    def eval(self, info: dict[str, Union[str, int, float, bool]]) -> bool:
         """
         return the result of the application of this BoolExpr to the subject
 
-        >>> r1 = BoolExpr('display_priority', [], '> 0')
+        >>> r1 = BoolExpr('display_priority', [], ('>', '0'))
         >>> ct = {'map_name':'none', 'x': 0, 'y': 0, 'vx': 0, 'vy': 0, 'ax': 0, \
             'ay': 0, 'display_priority': 0}
-        >>> creep = Particle(ct)
-        >>> r1.eval(creep)
+        >>> r1.eval(ct)
         False
-        >>> creep.display_priority = 1
-        >>> r1.eval(creep)
+        >>> ct['display_priority'] = 1
+        >>> r1.eval(ct)
         True
-        >>> r2 = BoolExpr('display_priority', [], '< 0')
-        >>> r2.eval(creep)
+        >>> r2 = BoolExpr('display_priority', [], ('<', '0'))
+        >>> r2.eval(ct)
         False
-        >>> creep.__setattr__('speed', 10)
-        >>> r3 = BoolExpr('speed', [], '> 9')
-        >>> r3.eval(creep)
+        >>> ct['speed'] = 10
+        >>> r3 = BoolExpr('speed', [], ('>', '9'))
+        >>> r3.eval(ct)
         True
         >>> r4 = BoolExpr('and', [r1, r3], None)
-        >>> r4.eval(creep)
+        >>> r4.eval(ct)
         True
-        >>> creep.speed = 0
-        >>> r3.eval(creep)
+        >>> ct['speed'] = 0
+        >>> r3.eval(ct)
         False
         """
         if self._root == 'empty':
             return True
         if self._root not in OPERATORS:
-            if hasattr(particle, self._root):
+            if self._root in info:
                 if self._condition == 'exist':
                     return True
                 elif isinstance(self._condition, bool):
                     if not self._condition:
-                        return not getattr(particle, self._root)
-                    return getattr(particle, self._root)
+                        return not info[self._root]
+                    return info[self._root]
                 elif self._condition[0] == '<':
-                    return getattr(particle, self._root) < self._condition[1]
+                    return info[self._root] < self._condition[1]
                 elif self._condition[0] == '>':
-                    return getattr(particle, self._root) > self._condition[1]
+                    return info[self._root] > self._condition[1]
                 elif self._condition[0] == '=':
-                    return getattr(particle, self._root) == self._condition[1]
+                    return info[self._root] == self._condition[1]
             return False
         if self._root == OP_NOT:
-            return not self._subtrees[0].eval(particle)
+            return not self._subtrees[0].eval(info)
         if self._root == OP_OR:
             for subtree in self._subtrees:
-                if subtree.eval(particle):
+                if subtree.eval(info):
                     return True
             return False
         if self._root == OP_AND:
             for subtree in self._subtrees:
-                if not subtree.eval(particle):
+                if not subtree.eval(info):
                     return False
             return True
 
@@ -164,33 +161,35 @@ class BoolExpr:
 
 
 def construct_from_list(
-        values: List[List[Union[str, Tuple[str, Union[str, bool]]]]]) -> BoolExpr:
+        values: List[List[Union[str,
+                                Tuple[str, Union[str, bool],
+                                      Optional[str]]]]]) -> BoolExpr:
     """
     Construct a BoolExpr from <values>.
 
     Precondition:
     <values> encodes a valid BoolExpr
 
-    >>> lst = [[OP_OR], [('health', '> 0'), ('speed', '> 0')]]
+    >>> lst = [[OP_OR], [('health','>', '0'), ('speed','>', '0')]]
     >>> r1 = construct_from_list(lst)
     >>> print(r1)
     ( health > 0 or speed > 0 )
-    >>> lst2 = [[OP_NOT], [OP_AND], [('health', '> 0'), ('speed', '> 0')]]
+    >>> lst2 = [[OP_NOT], [OP_AND], [('health', '>', '0'), ('speed', '>', '0')]]
     >>> r2 = construct_from_list(lst2)
     >>> print(r2)
     ( not ( health > 0 and speed > 0 ) )
-    >>> lst3 = [[OP_OR], [OP_AND, ('a', '= 10')], [('b', '> 0'), ('c', '> 0')]]
+    >>> lst3 = [[OP_OR], [OP_AND, ('a', '=', '10')], [('b', '>', '0'), ('c', '>', '0')]]
     >>> r3 = construct_from_list(lst3)
     >>> print(r3)
     ( ( b > 0 and c > 0 ) or a = 10 )
-    >>> lst4 = [[('health', '> 0')]]
+    >>> lst4 = [[('health', '>', '0')]]
     >>> r4 = construct_from_list(lst4)
     >>> print(r4)
     health > 0
     """
     begin = values[0][0]
     if begin not in OPERATORS:
-        return BoolExpr(begin[0], [], begin[1])
+        return BoolExpr(begin[0], [], (begin[1], begin[2]))
     q = Queue()
     exp = BoolExpr(begin, [], None)
     for subtree in values[1]:
@@ -204,7 +203,7 @@ def construct_from_list(
                 q.enqueue((subtree, sub))
             index += 1
         else:
-            sub = BoolExpr(p[0][0], [], p[0][1])
+            sub = BoolExpr(p[0][0], [], (p[0][1], p[0][2]))
         p[1].append(sub)
 
     return exp
