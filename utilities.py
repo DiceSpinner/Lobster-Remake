@@ -34,18 +34,28 @@ class Movable(Positional):
     === Public Attributes ===
     - vx: Velocity of the object in x-direction
     - vy: Velocity of the object in y-direction
+    - ax: Acceleration of the object in x-direction
+    - ay: Acceleration of the object in y-direction
     """
-
     vx: float
     vy: float
+    ax: float
+    ay: float
+    speed: float
 
     def __init__(self, info: dict[str, Union[str, float]]) -> None:
         Positional.__init__(self, info)
-        attr = ['vx', 'vy', 'ax', 'ay']
-        default = ['vx', 'vy', 'ax', 'ay']
+        attr = ['vx', 'vy', 'ax', 'ay', 'speed']
+        default = {
+            'vx': 0,
+            'vy': 0,
+            'ax': 0,
+            'ay': 0,
+            'speed': 2
+        }
         for key in default:
             if key not in info:
-                info[key] = 0
+                info[key] = default[key]
 
         for item in info:
             if item in attr:
@@ -57,12 +67,48 @@ class Movable(Positional):
         """
         raise NotImplementedError
 
+    def move(self, direction: Union[int, Positional]) -> None:
+        """ Move towards the target direction or object """
+        if isinstance(direction, Positional):
+            direction = get_direction(self, direction)
+        direction = math.radians(direction)
+        self.vx = self.speed * round(math.cos(direction), 2)
+        self.vy = - self.speed * round(math.sin(direction), 2)
 
-class Directional:
+
+class Directional(Positional):
+    """ Interface for directional objects
+
+    === Public Attributes ===
+    - direction: Direction of the object in degrees. direction = 0 when the
+        unit is facing right (3 o'clock, going counter clockwise as the
+        degree increases)
+
+    === Representation Invariants ===
+    - 0 <= direction < 360
     """
 
-    """
-    pass
+    direction: float
+
+    def __init__(self, info: dict[str, Union[str, float]]) -> None:
+        Positional.__init__(self, info)
+        attr = ['direction']
+        default = {
+            'direction': 0
+        }
+
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+
+        for item in info:
+            if item in attr:
+                setattr(self, item, info[item])
+
+    def aim(self, obj: Positional) -> None:
+        """ Change the direction pointing to the obj """
+        direction = get_direction(self, obj)
+        self.direction = direction
 
 
 class Collidable(Positional):
@@ -240,3 +286,20 @@ class Living:
     def update_status(self) -> None:
         """ Update the status of the object """
         raise NotImplementedError
+
+
+def get_direction(obj1: Positional, obj2: Positional) -> float:
+    """ Get direction of the obj2 from obj1 """
+    x_dif = obj2.x - obj1.x
+    # Reversed y-axis on screen
+    y_dif = obj1.y - obj2.y
+    if x_dif == 0:
+        if obj1.y < obj2.y:
+            return 270
+        else:
+            return 90
+    tan = y_dif / x_dif
+    arctan = math.degrees(math.atan(tan))
+    if obj1.x > obj2.x:
+        return 180 - arctan
+    return arctan

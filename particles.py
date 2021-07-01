@@ -2,9 +2,11 @@ from abc import ABC
 
 import pygame
 from typing import List, Any, Tuple, Union, Optional
-from utilities import Positional, Movable, Collidable, Lightable, Living
+from utilities import Positional, Movable, Collidable, Lightable, Living, \
+    Directional
 from settings import TILE_SIZE, SQUARE, CIRCLE, SHAPES
 import os
+import math
 
 
 class Particle(Positional):
@@ -67,23 +69,30 @@ class Item(Collidable):
     pass
 
 
-class Creature(Particle, Collidable, Movable, Living):
+class Creature(Particle, Collidable, Movable, Living, Directional):
     """
     Description: Movable entities
 
     Additional Attributes:
-
+        speed: Speed of this creature
+        active: Whether this creature is active
     Representation Invariants:
 
     """
     creature_group = {}
+    active: bool
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         if "display_priority" not in info:
             info['display_priority'] = 2
+        if "speed" not in info:
+            self.speed = 2
+        else:
+            self.speed = info['speed']
         Particle.__init__(self, info)
         Collidable.__init__(self, info)
         Movable.__init__(self, info)
+        Directional.__init__(self, info)
         Creature.creature_group[self.id] = self
 
     def display(self, screen: pygame.Surface,
@@ -94,9 +103,14 @@ class Creature(Particle, Collidable, Movable, Living):
         dark.fill((0, 0, 0))
         dark.set_alpha(100)
         screen.blit(dark, [location[0], location[1]])
-        pygame.draw.circle(screen, (0, 255, 255), (location[0] + self.diameter // 2, location[1] + self.diameter // 2), self.diameter // 2)
+        pygame.draw.circle(screen, (0, 255, 255), (
+        location[0] + self.diameter // 2, location[1] + self.diameter // 2),
+                           self.diameter // 2)
 
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
+        """ AI of this creature, this method should
+        be called on every active creature regularly
+        """
         raise NotImplementedError
 
     def is_dead(self) -> bool:
@@ -130,11 +144,11 @@ class Creature(Particle, Collidable, Movable, Living):
         while x_d > 0 or y_d > 0:
             if x_d > 0:
                 for i in range(x_time):
-                    if x_d > 1:
+                    if x_d >= 1:
                         value = self.vx / abs(self.vx)
                         x_d -= 1
                     else:
-                        value = self.vx % int(self.vx)
+                        value = self.vx - int(self.vx)
                         x_d = 0
                     self.x += value
                     n_x = int(self.x)
@@ -147,11 +161,11 @@ class Creature(Particle, Collidable, Movable, Living):
 
             if y_d > 0:
                 for i in range(y_time):
-                    if y_d > 1:
+                    if y_d >= 1:
                         value = self.vy / abs(self.vy)
                         y_d -= 1
                     else:
-                        value = self.vy % int(self.vy)
+                        value = self.vy - int(self.vy)
                         y_d = 0
                     self.y += value
                     n_y = int(self.y)
@@ -161,10 +175,8 @@ class Creature(Particle, Collidable, Movable, Living):
                                 self.y -= value
                                 y_d = 0
                                 break
-
-
-
-
+        self.vx = 0
+        self.vy = 0
 
     def remove(self):
         Particle.remove(self)
@@ -173,36 +185,57 @@ class Creature(Particle, Collidable, Movable, Living):
 
 class Player(Creature):
     """
+    Description: Player class
+
+    Additional Attributes:
+        pressed_keys: A list of pressed keys of this player
+    Representation Invariants:
 
     """
     player_group = {}
+    pressed_keys: List[int]
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         Creature.__init__(self, info)
         Player.player_group[self.id] = self
         self.texture = pygame.transform.scale(self.texture, (self.diameter,
                                                              self.diameter))
+        self.pressed_keys = []
 
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
         for event in player_input:
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_w:
-                    self.vy = -2.1
-                elif event.key == pygame.K_a:
-                    self.vx = -2.1
-                elif event.key == pygame.K_s:
-                    self.vy = 2.1
-                elif event.key == pygame.K_d:
-                    self.vx = 2.1
+                self.pressed_keys.append(event.key)
             elif event.type == pygame.KEYUP:
-                if event.key == pygame.K_w:
-                    self.vy = 0
-                elif event.key == pygame.K_a:
-                    self.vx = 0
-                elif event.key == pygame.K_s:
-                    self.vy = 0
-                elif event.key == pygame.K_d:
-                    self.vx = 0
+                self.pressed_keys.remove(event.key)
+        effective_directions = []
+        for key in self.pressed_keys:
+            if key == pygame.K_w or key == pygame.K_a:
+                effective_directions.append(key)
+            elif key == pygame.K_s:
+                if pygame.K_w not in effective_directions:
+                    effective_directions.append(key)
+            elif key == pygame.K_d:
+                if pygame.K_a not in effective_directions:
+                    effective_directions.append(key)
+        if pygame.K_w in effective_directions:
+            if pygame.K_a in effective_directions:
+                self.move(135)
+            elif pygame.K_d in effective_directions:
+                self.move(45)
+            else:
+                self.move(90)
+        elif pygame.K_s in effective_directions:
+            if pygame.K_a in effective_directions:
+                self.move(225)
+            elif pygame.K_d in effective_directions:
+                self.move(315)
+            else:
+                self.move(270)
+        elif pygame.K_a in effective_directions:
+            self.move(180)
+        elif pygame.K_d in effective_directions:
+            self.move(0)
 
     def remove(self):
         Creature.remove(self)
@@ -213,6 +246,7 @@ class Block(Particle, Collidable, Lightable):
     """
 
     """
+
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         Particle.__init__(self, info)
         Collidable.__init__(self, info)
@@ -229,4 +263,3 @@ class Block(Particle, Collidable, Lightable):
         dark.fill((0, 0, 0))
         dark.set_alpha(255 - self.brightness)
         # screen.blit(dark, [location[0], location[1]])
-
