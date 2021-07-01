@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Union, List
+from typing import Union, List, Optional, Any
 from error import UnknownShapeError
 from bool_expr import BoolExpr, construct_from_list
 import math
@@ -17,7 +17,7 @@ class Positional:
     x: float
     y: float
 
-    def __init__(self, info: dict[str, Union[str, float]]) -> None:
+    def __init__(self, info: dict[str, Union[str, int]]) -> None:
         attr = ['x', 'y', 'map_name']
         for item in attr:
             if item not in info:
@@ -51,12 +51,11 @@ class Movable(Positional):
             if item in attr:
                 setattr(self, item, info[item])
 
-    def update_position(self) -> None:
+    def update_position(self, parameter: Optional[Any]) -> None:
         """
         Update the object's position.
         """
-        self.x += self.vx
-        self.y += self.vy
+        raise NotImplementedError
 
 
 class Directional:
@@ -113,41 +112,49 @@ class Collidable(Positional):
 
     def _square_square(self, other: Collidable) -> bool:
         """ Collision Detection between two squares """
-        if self.x < other.x - self.diameter:
+        c1x = round(self.x, 0)
+        c1y = round(self.y, 0)
+        c2x = round(other.x, 0)
+        c2y = round(other.y, 0)
+        if c1x <= c2x - self.diameter:
             return False
-        if self.y < other.y - self.diameter:
+        if c1y <= c2y - self.diameter:
             return False
-        if self.x - other.diameter > other.x:
+        if c1x - other.diameter >= c2x:
             return False
-        if self.y - other.diameter > other.y:
+        if c1y - other.diameter >= c2y:
             return False
         return True
 
     def _square_circle(self, other: Collidable) -> bool:
         radius = other.diameter / 2
-        cx = other.x + radius
-        cy = other.y + radius
+        c1x = round(self.x, 0)
+        c1y = round(self.y, 0)
+        c2x = round(other.x, 0) + radius - 1
+        c2y = round(other.y, 0) + radius - 1
 
-        if self.x > cx:
-            if self.y > cy:
-                return math.sqrt(pow(self.x - cx, 2) +
-                                 pow(self.y - cy, 2)) < radius
-            elif self.y + self.diameter < cy:
-                return math.sqrt(pow(self.x - cx, 2) +
-                                 pow(self.y + self.diameter - cy, 2)) <= radius
-        elif self.x + self.diameter < cx:
-            if self.y > cy:
-                return math.sqrt(pow(self.x + self.diameter - cx, 2) +
-                                 pow(self.y - cy, 2)) < radius
-            elif self.y + self.diameter < cy:
-                return math.sqrt(pow(self.x + self.diameter - cx, 2) +
-                                 pow(self.y + self.diameter - cy, 2)) < radius
+        if c1x > c2x:
+            if c1y > c2y:
+                return math.sqrt(pow(c1x - c2x, 2) +
+                                 pow(c1y - c2y, 2)) < radius
+            elif c1y + self.diameter - 1 < c2y:
+                return math.sqrt(pow(c1x - c2x, 2) +
+                                 pow(c1y + self.diameter - 1 - c2y, 2)) \
+                       < radius
+        elif c1x + self.diameter - 1 < c2x:
+            if c1y > c2y:
+                return math.sqrt(pow(c1x + self.diameter - 1 - c2x, 2) +
+                                 pow(c1y - c2y, 2)) < radius
+            elif c1y + self.diameter - 1 < c2y:
+                return math.sqrt(pow(c1x + self.diameter - 1 - c2x, 2) +
+                                 pow(c1y + self.diameter - 1 - c2y, 2)) \
+                       < radius
         return self._square_square(other)
 
     def _circle_circle(self, other: Collidable) -> bool:
         r1 = self.diameter / 2
-        cx1 = self.x + r1
-        cy1 = self.y + r1
+        cx1 = self.x + r1 - 1
+        cy1 = self.y + r1 - 1
 
         r2 = other.diameter / 2
         cx2 = other.x + r2

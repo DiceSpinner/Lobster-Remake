@@ -9,7 +9,8 @@ from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
 from settings import *
 from data_structures import PriorityQueue
-from math_formula import segment_intersection, line_circle_intersection
+from math_formula import segment_intersection, line_circle_intersection, \
+    point_vec_left, point_vec_right, point_on_segment
 import os
 
 
@@ -76,7 +77,6 @@ class GameMap:
                 for k in range(len(col)):
                     entity = col[k]
                     if isinstance(entity, Movable):
-                        entity.update_position()
                         self.entity_collision_check([i, j, k])
                         self.entities[i][j].remove(entity)
                         self.entities[int(entity.y // TILE_SIZE)][
@@ -99,14 +99,16 @@ class GameMap:
             end_row = len(self.entities) - 1
         if end_col >= len(self.entities[end_row]):
             end_col = len(self.entities[end_row]) - 1
+        checking = []
         for i in range(start_row, end_row + 1):
             for j in range(start_col, end_col + 1):
                 tile = self.blocks[i][j]
-                if entity.detect_collision(tile):
-                    # print('Collide with row:' + str(i), "col:" + str(j))
-                    if isinstance(entity, Movable) and (not entity.vx == 0 or
-                                                        not entity.vy == 0):
-                        correct_position(entity, tile)
+                entities = self.entities[i][j][:]
+                if i == row and j == col:
+                    entities.pop(k)
+                checking.append(tile)
+                checking += entities
+        entity.update_position(checking)
 
 
 class Camera(Positional):
@@ -254,8 +256,8 @@ class Level:
             self._camera = Camera(player,
                                   screen.get_height(), screen.get_width(),
                                   self._game_maps)
-        player_key = list(Player.player_group)[0]
-        player = Player.player_group[player_key]
+            player_key = list(Player.player_group)[0]
+            player = Player.player_group[player_key]
 
         player_input = []
         for event in pygame.event.get():
@@ -357,11 +359,17 @@ def compare_by_display_priority(p1: Particle, p2: Particle) -> bool:
     return p2.display_priority > p1.display_priority
 
 
+# Deprecated (buggily implemented)..............................................
 def correct_position(c1: Collidable, c2: Collidable) -> None:
     """ Correct the position of c1 so it doesn't collide with c2 "
 
     Pre-condition: c1 implements the Movable interface
     """
+    c1.x -= c1.vx
+    c1.y -= c1.vy
+    if c1.detect_collision(c2):
+        raise NotImplementedError
+    c1.update_position()
     if c1.shape == SQUARE and c2.shape == SQUARE:
         _square_square(c1, c2)
         return
@@ -381,7 +389,7 @@ def _square_square(c1: Collidable, c2: Collidable) -> None:
     corners = [corner_upleft, corner_upright, corner_bottomleft,
                corner_bottomright]
     collided = []
-
+    print("Call:.......................................")
     for corner in corners:
         if c2.x <= corner[0] <= c2.x + c2.diameter and c2.y <= corner[
              1] <= c2.y + c2.diameter:
@@ -393,56 +401,129 @@ def _square_square(c1: Collidable, c2: Collidable) -> None:
     down = ((c2.x - 1, c2.y + c2.diameter + 1), (c2.x + 1 + c2.diameter,
                                                  c2.y + c2.diameter + 1))
     sides = [left, up, right, down]
-    previous = []
-    for i in range(len(collided)):
-        corner = collided[i]
-        previous.append((corner[0] - c1.vx, corner[1] - c1.vy))
-    for i in range(len(collided)):
-        corner = collided[i]
-        for side in sides:
-            poi = segment_intersection(side, (corner, previous[i]))
-            if poi is not None:
-                x = poi[0] - corner[0]
-                y = poi[1] - corner[1]
-                c1.x += x
-                c1.y += y
-                for c in range(len(collided)):
-                    co = collided[c]
-                    collided[c] = (co[0] + x, co[1] + y)
+    corner = collided[0]
+    previous = corner[0] - c1.vx, corner[1] - c1.vy
+    for side in sides:
+        poi = segment_intersection(side, (corner, previous))
+        print(poi)
+        if poi is not None:
+            x = poi[0] - corner[0]
+            y = poi[1] - corner[1]
+            print("Before:", c1.x, c1.y)
+            c1.x += x
+            c1.y += y
+            print("After:", c1.x, c1.y)
+            for c in range(len(collided)):
+                co = collided[c]
+                collided[c] = (co[0] + x, co[1] + y)
 
 
 def _circle_square(c1: Collidable, c2: Collidable) -> None:
-    centre_x = c1.x + c1.diameter / 2
-    centre_y = c1.y + c1.diameter / 2
+    centre_x = c1.x + c1.diameter / 2 - 1
+    centre_y = c1.y + c1.diameter / 2 - 1
     tl = (c2.x - 1, c2.y - 1)
-    tr = (c2.x + c2.diameter + 1, c2.y - 1)
-    br = (c2.x + c2.diameter + 1, c2.y + c2.diameter + 1)
-    bl = (c2.x - 1, c2.y + c2.diameter + 1)
+    tr = (c2.x + c2.diameter, c2.y - 1)
+    br = (c2.x + c2.diameter, c2.y + c2.diameter)
+    bl = (c2.x - 1, c2.y + c2.diameter)
     p1 = None
     p2 = None
-    if centre_x <= tl[0] and centre_y <= tl[1]:
+    if centre_x <= tl[0] + 1 and centre_y <= tl[1] + 1:
         p1 = tl
         p2 = (p1[0] - c1.vx, p1[1] - c1.vy)
-    elif centre_x >= tr[0] and centre_y <= tr[1]:
+    elif centre_x >= tr[0] - 1 and centre_y <= tr[1] + 1:
         p1 = tr
         p2 = (p1[0] - c1.vx, p1[1] - c1.vy)
-    elif centre_x >= br[0] and centre_y >= br[1]:
+    elif centre_x >= br[0] - 1 and centre_y >= br[1] - 1:
         p1 = br
         p2 = (p1[0] - c1.vx, p1[1] - c1.vy)
-    elif centre_x <= bl[0] and centre_y >= bl[1]:
+    elif centre_x <= bl[0] + 1 and centre_y >= bl[1] - 1:
         p1 = bl
         p2 = (p1[0] - c1.vx, p1[1] - c1.vy)
     if p1 is not None and p2 is not None:
-        poi = line_circle_intersection((p1, p2), (c1.x, c1.y), c1.diameter)
-        print(poi)
-        for point in poi:
-            if c2.x <= point[0] <= c2.x + c2.diameter and \
-                    c2.y <= point[1] <= c2.y + c2.diameter:
-                offset_x = p1[0] - point[0]
-                offset_y = p1[1] - point[1]
-                c1.x += offset_x
-                c1.y += offset_y
+        line = (p1, p2)
+        centre = (centre_x, centre_y)
+        if p1 == tl:
+            l1 = (p1, (p1[0], c2.y + c2.diameter))
+            l2 = (p1, (c2.x + c2.diameter, p1[1]))
+            poi1 = line_circle_intersection(l1, (c1.x, c1.y),
+                                            c1.diameter)
+            poi2 = line_circle_intersection(l2, (c1.x, c1.y), c1.diameter)
+            if point_vec_left(line, centre):
+                for p in poi2:
+                    if point_on_segment(l2, p):
+                        offset_x = poi1[0][0] - p[0]
+                        c1.x += offset_x
+                        c1.x = round(c1.x, 0)
+                        return
+            else:
+                for p in poi1:
+                    if point_on_segment(l1, p):
+                        offset_y = poi2[0][1] - p[1]
+                        c1.y += offset_y
+                        c1.y = round(c1.y, 0)
+                        return
+        elif p1 == tr:
+            l1 = (p1, (c2.x - 1, p1[1]))
+            l2 = (p1, (p1[0], c2.y + c2.diameter))
+            poi1 = line_circle_intersection(l1, (c1.x, c1.y),
+                                            c1.diameter)
+            poi2 = line_circle_intersection(l2, (c1.x, c1.y), c1.diameter)
+            if point_vec_left(line, centre):
+                for p in poi2:
+                    if point_on_segment(l2, p):
+                        offset_y = poi1[0][1] - p[1]
+                        c1.y += offset_y
+                        c1.y = round(c1.y, 0)
+                        return
+            else:
+                for p in poi1:
+                    if point_on_segment(l1, p):
+                        offset_x = poi2[0][0] - p[0]
+                        c1.x += offset_x
+                        c1.x = round(c1.x, 0)
+                        return
+        elif p1 == br:
+            l1 = (p1, (c2.x - 1, p1[1]))
+            l2 = (p1, (p1[0], c2.y - 1))
+            poi1 = line_circle_intersection(l1, (c1.x, c1.y),
+                                            c1.diameter)
+            poi2 = line_circle_intersection(l2, (c1.x, c1.y), c1.diameter)
+            if point_vec_right(line, centre):
+                for p in poi2:
+                    if point_on_segment(l2, p):
+                        offset_y = poi1[0][1] - p[1]
+                        c1.y += offset_y
+                        c1.y = round(c1.y)
+                        return
+            else:
+                for p in poi1:
+                    if point_on_segment(l1, p):
+                        offset_x = poi2[0][0] - p[0]
+                        c1.x += offset_x
+                        c1.x = round(c1.x, 0)
+                        return
+        else:
+            l1 = (p1, (p1[0], c2.y - 1))
+            l2 = (p1, (c2.x + c2.diameter, c2.y + c2.diameter))
+            poi1 = line_circle_intersection(l1, (c1.x, c1.y),
+                                            c1.diameter)
+            poi2 = line_circle_intersection(l2, (c1.x, c1.y), c1.diameter)
+            if point_vec_right(line, centre):
+                for p in poi2:
+                    if point_on_segment(l2, p):
+                        offset_x = poi1[0][0] - p[0]
+                        c1.x += offset_x
+                        c1.x = round(c1.x, 0)
+                        return
+            else:
+                for p in poi1:
+                    if point_on_segment(l1, p):
+                        offset_y = poi2[0][1] - p[1]
+                        c1.y += offset_y
+                        c1.y = round(c1.y, 0)
+                        return
     else:
+        print("Calling Square method")
         _square_square(c1, c2)
 
 

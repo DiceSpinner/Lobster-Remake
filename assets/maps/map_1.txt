@@ -1,8 +1,8 @@
 TestMap 20 20
 W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P_PY	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
+W	P	W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
+W	P	P	P_PY	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
 W	P	P	P	P	P	P	W	P	P	P	P	P	P	P	P	P	P	P	W

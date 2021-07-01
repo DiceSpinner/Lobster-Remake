@@ -1,59 +1,87 @@
 import math
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Union
+
+
+def float_equality(v1: float, v2: float, precision=0) -> bool:
+    """ Return true of two floats are equal """
+    p = pow(0.1, precision)
+    return abs(v1 - v2) < p
 
 
 def segment_intersection(l1: Tuple[Tuple[float, float], Tuple[float, float]],
                          l2: Tuple[Tuple[float, float], Tuple[float, float]]
-                         ) -> Optional[Tuple[float, float]]:
+                         ) -> Optional[Union[Tuple[float, float],
+                                             Tuple[Tuple[float, float], Tuple[
+                                                 float, float]]]]:
     """ Return the intersection point of two line segments, none if they
-     are not intersected.
+     are not intersected. Return a line segment if there's infinite POI.
     """
     # Calculate slopes and obtain line formula
-    p1 = l1[0]
-    p2 = l1[1]
-    p3 = l2[0]
-    p4 = l2[1]
-    s1, s2, b1, b2 = None, None, None, None
-    x, y = None, None
-    if not p2[0] == p1[0]:
-        s1 = (p2[1] - p1[1]) / (p2[0] - p1[0])
-        b1 = p1[1] - s1 * p1[0]
-    if not p3[0] == p4[0]:
-        s2 = (p4[1] - p3[1]) / (p4[0] - p3[0])
-        b2 = p3[1] - s2 * p3[0]
-    if s1 is None and s2 is not None:
-        x = p1[0]
-        y = s2 * x + b2
-    if s2 is None:
-        x = p3[0]
-        if s1 is None:
-            if p3[0] == p1[0]:
-                if p1[1] <= p3[1] <= p2[1] or p2[1] <= p3[1] <= p1[1]:
-                    return x, p3[1]
-                if p1[1] <= p4[1] <= p2[1] or p2[1] <= p4[1] <= p1[1]:
-                    return x, p4[1]
-                return None
+    i1 = calculate_slope_constant(l1[0], l1[1])
+    i2 = calculate_slope_constant(l2[0], l2[1])
+    print("Lines:", l1, l2)
+    print("Slopes:", i1, i2)
+    if i1 is None:
+        if i2 is None:
+            if l1[0][0] == l2[0][0]:
+                y1, y2, y3, y4 = l1[0][1], l1[1][1], l2[0][1], l2[1][1]
+                max_y = max(y1, y2, y3, y4)
+                min_y = min(y1, y2, y3, y4)
+                pool = [l1[0], l1[1], l2[0], l2[1]]
+                returning = []
+                for i in range(len(pool)):
+                    y = pool[i][1]
+                    if not y == min_y and not y == max_y:
+                        returning.append(y)
+                return returning[0], returning[1]
             return None
-        y = s1 * x + b1
-    if s1 is not None and s2 is not None:
-        if s1 == s2:
-            a1 = pow(p1[0], 2) + pow(p1[1], 2)
-            a2 = pow(p2[0], 2) + pow(p2[1], 2)
-            a3 = pow(p3[0], 2) + pow(p3[1], 2)
-            a4 = pow(p4[0], 2) + pow(p4[1], 2)
-            if a1 <= a3 <= a2 or a2 <= a3 <= a1:
-                return p3[0], p3[1]
-            if a1 <= a4 <= a2 or a2 <= a4 <= a1:
-                return p4[0], p4[1]
-            return None
-        x = (b2 - b1) / (s1 - s2)
-        y = s1 * x + b1
-    assert x is not None
-    assert y is not None
-    # Test if the point is on both line segment
+        x = l1[0][0]
+        y = i2[0] * x + i2[1]
+        print("Attempting 2", x, y)
+        if point_on_segment(l1, (x, y)) and point_on_segment(l2, (x, y)):
+            return x, y
+        return None
+    if i2 is None:
+        x = l2[0][0]
+        y = i1[0] * x + i1[1]
+        print("Attempting 3", x, y)
+        if point_on_segment(l1, (x, y)) and point_on_segment(l2, (x, y)):
+            return x, y
+        return None
+    if i1[0] == i2[0]:
+        return None
+    if i1[0] == i2[0]:
+        x1, x2, x3, x4 = l1[0][0], l1[1][0], l2[0][0], l2[1][0]
+        max_x = max(x1, x2, x3, x4)
+        min_x = min(x1, x2, x3, x4)
+        pool = [l1[0], l1[1], l2[0], l2[1]]
+        returning = []
+        for i in range(len(pool)):
+            x = pool[i][1]
+            if not x == min_x and not x == max_x:
+                returning.append(x)
+        return returning[0], returning[1]
+    x = (i2[1] - i1[1]) / (i1[0] - i2[0])
+    y = i1[0] * x + i1[1]
+    print("Attempting 4", x, y)
     if point_on_segment(l1, (x, y)) and point_on_segment(l2, (x, y)):
         return x, y
     return None
+
+
+def calculate_slope_constant(p1: Tuple[float, float],
+                             p2: Tuple[float, float]) -> Optional[
+        Union[Tuple[float, float], int]]:
+    """ Calculate the slope/constant of the given line,
+    return None if it's vertical
+    """
+    if p1[0] == p2[0]:
+        return None
+    if p1[1] == p2[1]:
+        return 0, p1[1]
+    slope = (p2[1] - p1[1]) / (p2[0] - p1[0])
+    constant = p1[1] - p1[0] * slope
+    return slope, constant
 
 
 def point_on_segment(l1: Tuple[Tuple[float, float], Tuple[float, float]],
@@ -66,7 +94,11 @@ def point_on_segment(l1: Tuple[Tuple[float, float], Tuple[float, float]],
     max_x1 = max(p1[0], p2[0])
     min_y1 = min(p1[1], p2[1])
     max_y1 = max(p1[1], p2[1])
-    return min_x1 <= point[0] <= max_x1 and min_y1 <= point[1] <= max_y1
+    return (min_x1 < point[0] < max_x1 or float_equality(point[0], min_x1)
+            or float_equality(point[0], max_x1)
+            ) and (min_y1 < point[1] < max_y1 or
+                   (float_equality(point[1], min_y1) or
+                    float_equality(point[1], max_y1)))
 
 
 def point_on_line(l1: Tuple[Tuple[float, float], Tuple[float, float]],
@@ -81,18 +113,21 @@ def point_on_line(l1: Tuple[Tuple[float, float], Tuple[float, float]],
     >>> line2 = ((0, 1), (3, 4))
     >>> point_on_line(line2, p)
     True
-    >>> line3 = ()
+    >>> line3 = ((0, 4), (2, 0))
+    >>> point2 = (-1, 6)
+    >>> point_on_line(line3, point2)
+    True
     """
     p1 = l1[0]
     p2 = l1[1]
-    if p1[0] == p2[0]:
-        return p1[0] == point[0]
-    if p2[1] == p1[1]:
-        return p1[1] == point[1]
+    if abs(p1[0] - p2[0]) <= 0.0001:
+        return abs(p1[0] - point[0]) <= 0.0001
+    if abs(p2[1] - p1[1]) <= 0.0001:
+        return abs(p1[1] - point[1]) <= 0.0001
     slope = (p2[1] - p1[1]) / (p2[0] - p1[0])
     constant = p1[1] - slope * p1[0]
     y = slope * point[0] + constant
-    return abs(y - point[1]) <= 0.00001
+    return abs(y - point[1]) <= 0.0001
 
 
 def line_circle_intersection(l: Tuple[Tuple[float, float], Tuple[float, float]],
@@ -116,7 +151,8 @@ def line_circle_intersection(l: Tuple[Tuple[float, float], Tuple[float, float]],
 
     # formula of the circle: r^2 = (x - h)^2 + (y - k)^2
     # centre of the circle
-    centre = (circle_xy[0] + diameter / 2, circle_xy[1] + diameter / 2)
+    centre = (circle_xy[0] + diameter / 2 - 0.5,
+              circle_xy[1] + diameter / 2 - 0.5)
 
     # Slope of the line
     p1 = l[0]
@@ -144,7 +180,7 @@ def line_circle_intersection(l: Tuple[Tuple[float, float], Tuple[float, float]],
         x = (-b) / (2 * a)
         value = pow(diameter / 2, 2) - pow((x - centre[0]), 2)
         y = math.sqrt(value) + centre[1]
-        return [(x, y)]
+        return [(round(x, 0), round(y, 0))]
     x1 = (-b + math.sqrt(delta)) / (2 * a)
     x2 = (-b - math.sqrt(delta)) / (2 * a)
     v1 = pow(diameter / 2, 2) - pow((x1 - centre[0]), 2)
@@ -153,6 +189,7 @@ def line_circle_intersection(l: Tuple[Tuple[float, float], Tuple[float, float]],
     y2 = -math.sqrt(v1) + centre[1]
     y3 = math.sqrt(v2) + centre[1]
     y4 = -math.sqrt(v2) + centre[1]
+    # rounding
     if y1 == y2 and y3 == y4:
         points = [(x1, y1), (x2, y3)]
     else:
@@ -163,3 +200,53 @@ def line_circle_intersection(l: Tuple[Tuple[float, float], Tuple[float, float]],
             returning.append(point)
     return returning
 
+
+def point_vec_left(
+        l1: Tuple[Tuple[float, float], Tuple[float, float]],
+        point: Tuple[float, float]) -> bool:
+    """ Test if the point is on the left side of given vector
+
+    Assume l1[0] is the starting point
+    """
+    p1 = l1[0]
+    p2 = l1[1]
+
+    if p1[1] == p2[1]:
+        if p1[0] < p2[0]:
+            return point[1] < p1[1]
+        return point[1] > p1[1]
+    if p1[0] == p2[0]:
+        if p1[1] < p2[1]:
+            return point[0] > p1[0]
+        return point[0] < p1[0]
+    slope = (p2[1] - p1[1]) / (p2[0] - p1[0])
+    constant = p1[1] - slope * p1[0]
+    y_on_line = slope * point[0] + constant
+    if p1[0] < p2[0]:
+        return y_on_line < point[1]
+    return y_on_line > point[1]
+
+
+def point_vec_right(
+        l1: Tuple[Tuple[float, float], Tuple[float, float]],
+        point: Tuple[float, float]) -> bool:
+    """ Test if the point is on the right side of given vector
+
+    Assume l1[0] is the starting point
+    """
+    p1 = l1[0]
+    p2 = l1[1]
+    if p1[1] == p2[1]:
+        if p1[0] < p2[0]:
+            return point[1] > p1[1]
+        return point[1] < p1[1]
+    if p1[0] == p2[0]:
+        if p1[1] < p2[1]:
+            return point[0] < p1[0]
+        return point[0] > p1[0]
+    slope = (p2[1] - p1[1]) / (p2[0] - p1[0])
+    constant = p1[1] - slope * p1[0]
+    y_on_line = slope * point[0] + constant
+    if p1[0] < p2[0]:
+        return y_on_line > point[1]
+    return y_on_line < point[1]

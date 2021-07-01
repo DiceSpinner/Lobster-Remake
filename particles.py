@@ -94,7 +94,7 @@ class Creature(Particle, Collidable, Movable, Living):
         dark.fill((0, 0, 0))
         dark.set_alpha(100)
         screen.blit(dark, [location[0], location[1]])
-        # pygame.draw.circle(screen, (0, 255, 255), (location[0] + self.diameter // 2, location[1] + self.diameter // 2), self.diameter // 2)
+        pygame.draw.circle(screen, (0, 255, 255), (location[0] + self.diameter // 2, location[1] + self.diameter // 2), self.diameter // 2)
 
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
         raise NotImplementedError
@@ -105,6 +105,66 @@ class Creature(Particle, Collidable, Movable, Living):
     def update_status(self) -> None:
         if self.is_dead():
             self.remove()
+
+    def update_position(self, particles: List[Collidable]) -> None:
+        x_d = abs(self.vx)
+        y_d = abs(self.vy)
+        c_x = int(self.x)
+        c_y = int(self.y)
+        if self.vx == 0 and self.vy == 0:
+            return
+        if self.vx == 0:
+            x_time = 0
+            y_time = 1
+        elif self.vy == 0:
+            x_time = 1
+            y_time = 0
+        elif abs(self.vx) > abs(self.vy):
+            x_time = int(round(abs(self.vx) / abs(self.vy), 0))
+            y_time = 1
+        elif abs(self.vx) < abs(self.vy):
+            x_time = 1
+            y_time = int(round(abs(self.vy) / abs(self.vx), 0))
+        else:
+            x_time, y_time = 1, 1
+        while x_d > 0 or y_d > 0:
+            if x_d > 0:
+                for i in range(x_time):
+                    if x_d > 1:
+                        value = self.vx / abs(self.vx)
+                        x_d -= 1
+                    else:
+                        value = self.vx % int(self.vx)
+                        x_d = 0
+                    self.x += value
+                    n_x = int(self.x)
+                    if abs(n_x - c_x) >= 1:
+                        for particle in particles:
+                            if self.detect_collision(particle):
+                                self.x -= value
+                                x_d = 0
+                                break
+
+            if y_d > 0:
+                for i in range(y_time):
+                    if y_d > 1:
+                        value = self.vy / abs(self.vy)
+                        y_d -= 1
+                    else:
+                        value = self.vy % int(self.vy)
+                        y_d = 0
+                    self.y += value
+                    n_y = int(self.y)
+                    if abs(n_y - c_y) >= 1:
+                        for particle in particles:
+                            if self.detect_collision(particle):
+                                self.y -= value
+                                y_d = 0
+                                break
+
+
+
+
 
     def remove(self):
         Particle.remove(self)
@@ -127,13 +187,13 @@ class Player(Creature):
         for event in player_input:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_w:
-                    self.vy = -5
+                    self.vy = -2.1
                 elif event.key == pygame.K_a:
-                    self.vx = -5
+                    self.vx = -2.1
                 elif event.key == pygame.K_s:
-                    self.vy = 5
+                    self.vy = 2.1
                 elif event.key == pygame.K_d:
-                    self.vx = 5
+                    self.vx = 2.1
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_w:
                     self.vy = 0
