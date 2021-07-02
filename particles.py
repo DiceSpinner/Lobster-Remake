@@ -3,7 +3,7 @@ from abc import ABC
 import pygame
 from typing import List, Any, Tuple, Union, Optional
 from utilities import Positional, Movable, Collidable, Lightable, Living, \
-    Directional
+    Directional, get_direction
 from settings import TILE_SIZE, SQUARE, CIRCLE, SHAPES
 import os
 import math
@@ -76,36 +76,70 @@ class Creature(Particle, Collidable, Movable, Living, Directional):
     Additional Attributes:
         speed: Speed of this creature
         active: Whether this creature is active
+        color: Displayed color of this creature
     Representation Invariants:
 
     """
     creature_group = {}
     active: bool
+    color: Tuple[int, int, int]
 
-    def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
+    def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
         if "display_priority" not in info:
             info['display_priority'] = 2
-        if "speed" not in info:
-            self.speed = 2
-        else:
-            self.speed = info['speed']
+
         Particle.__init__(self, info)
         Collidable.__init__(self, info)
         Movable.__init__(self, info)
         Directional.__init__(self, info)
         Creature.creature_group[self.id] = self
+        self.texture = pygame.transform.scale(self.texture, (self.diameter * 2,
+                                                             self.diameter * 2))
+        attr = ["active", 'color']
+        default = {
+            'active': True,
+            'color': (255, 255, 255)
+        }
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+        for item in info:
+            if item in attr:
+                setattr(self, item, info[item])
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
-        screen.blit(self.texture, [location[0], location[1]])
-        dark = pygame.Surface((self.diameter,
-                               self.diameter))
-        dark.fill((0, 0, 0))
-        dark.set_alpha(100)
-        screen.blit(dark, [location[0], location[1]])
-        pygame.draw.circle(screen, (0, 255, 255), (
-        location[0] + self.diameter // 2, location[1] + self.diameter // 2),
-                           self.diameter // 2)
+        radius = self.diameter / 2
+        texture = pygame.transform.rotate(self.texture, self.direction)
+        centre_x = location[0] + radius - 1
+        centre_y = location[1] + radius - 1
+        size = texture.get_size()
+        cx = centre_x - size[0] / 2 + radius
+        cy = centre_y - size[1] / 2
+        # texture = self.texture
+        screen.blit(texture, [cx - radius, cy])
+        # dark = pygame.Surface((self.diameter,
+        #                       self.diameter))
+        # dark.fill((0, 0, 0))
+        # dark.set_alpha(100)
+        # screen.blit(dark, [location[0], location[1]])
+
+        if self.shape == CIRCLE:
+            pygame.draw.circle(
+                screen, self.color, (location[0] + self.diameter // 2, location[
+                    1] + radius), radius)
+        elif self.shape == SQUARE:
+            pygame.draw.rect(
+                screen, self.color, pygame.Rect(location[0] + radius, location[
+                    1] + radius, radius, radius))
+
+    def aim(self, obj: Positional) -> None:
+        cx = self.x + self.diameter / 2 - 1
+        cy = self.y + self.diameter / 2 - 1
+        obj = (obj.x, obj.y)
+        if isinstance(obj, Collidable):
+            obj = (obj.x + obj.diameter / 2 - 1, obj.y + obj.diameter / 2 - 1)
+        self.direction = get_direction((cx, cy), obj)
 
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
         """ AI of this creature, this method should
@@ -198,8 +232,6 @@ class Player(Creature):
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         Creature.__init__(self, info)
         Player.player_group[self.id] = self
-        self.texture = pygame.transform.scale(self.texture, (self.diameter,
-                                                             self.diameter))
         self.pressed_keys = []
 
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
@@ -215,9 +247,13 @@ class Player(Creature):
             elif key == pygame.K_s:
                 if pygame.K_w not in effective_directions:
                     effective_directions.append(key)
+                else:
+                    effective_directions.remove(pygame.K_w)
             elif key == pygame.K_d:
                 if pygame.K_a not in effective_directions:
                     effective_directions.append(key)
+                else:
+                    effective_directions.remove(pygame.K_a)
         if pygame.K_w in effective_directions:
             if pygame.K_a in effective_directions:
                 self.move(135)
@@ -263,3 +299,28 @@ class Block(Particle, Collidable, Lightable):
         dark.fill((0, 0, 0))
         dark.set_alpha(255 - self.brightness)
         # screen.blit(dark, [location[0], location[1]])
+
+
+class NPC(Creature):
+    """ Description: Non-Player Character class
+
+    Additional Attributes:
+        reaction_range: The range where this npc will react to other entities
+        blocks_in_range: Tiles within the reaction range of this npc
+        entities_in_range: Entities within the reaction range of this npc
+    Representation Invariants:
+    """
+    reaction_range: int
+    blocks_in_range: List[List[Block]]
+    entities_in_range: List[List[List[Union[Creature, Item]]]]
+    npc_group = {}
+
+    def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
+        Creature.__init__(self, info)
+        NPC.npc_group[self.id] = self
+
+    def query_info(self):
+        pass
+
+    def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
+        pass

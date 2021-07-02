@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Union, List, Optional, Any
+from typing import Union, List, Optional, Any, Tuple
 from error import UnknownShapeError
 from bool_expr import BoolExpr, construct_from_list
 import math
@@ -70,7 +70,8 @@ class Movable(Positional):
     def move(self, direction: Union[int, Positional]) -> None:
         """ Move towards the target direction or object """
         if isinstance(direction, Positional):
-            direction = get_direction(self, direction)
+            direction = get_direction((self.x, self.y), (direction.x,
+                                                         direction.y))
         direction = math.radians(direction)
         self.vx = self.speed * round(math.cos(direction), 2)
         self.vy = - self.speed * round(math.sin(direction), 2)
@@ -107,7 +108,7 @@ class Directional(Positional):
 
     def aim(self, obj: Positional) -> None:
         """ Change the direction pointing to the obj """
-        direction = get_direction(self, obj)
+        direction = get_direction((self.x, self.y), (obj.x, obj.y))
         self.direction = direction
 
 
@@ -203,8 +204,8 @@ class Collidable(Positional):
         cy1 = self.y + r1 - 1
 
         r2 = other.diameter / 2
-        cx2 = other.x + r2
-        cy2 = other.y + r2
+        cx2 = other.x + r2 - 1
+        cy2 = other.y + r2 - 1
 
         return math.sqrt(pow(cx1 - cx2, 2) + pow(cy1 - cy2, 2)) < (r1 + r2)
 
@@ -288,18 +289,42 @@ class Living:
         raise NotImplementedError
 
 
-def get_direction(obj1: Positional, obj2: Positional) -> float:
-    """ Get direction of the obj2 from obj1 """
-    x_dif = obj2.x - obj1.x
+def get_direction(obj1: Tuple[float, float], obj2: Tuple[float, float]) -> float:
+    """ Get direction of the obj2 from obj1
+
+    >>> p1 = (0, 0)
+    >>> p2 = (5, 5)
+    >>> get_direction(p1, p2)
+    315.0
+    >>> p3 = (2, 3)
+    >>> get_direction(p1, p3)
+    303.69
+    >>> get_direction(p2, p3)
+    326.31
+    """
+    x_dif = obj2[0] - obj1[0]
     # Reversed y-axis on screen
-    y_dif = obj1.y - obj2.y
+    y_dif = obj1[1] - obj2[1]
     if x_dif == 0:
-        if obj1.y < obj2.y:
+        if obj1[1] < obj2[1]:
             return 270
         else:
             return 90
     tan = y_dif / x_dif
     arctan = math.degrees(math.atan(tan))
-    if obj1.x > obj2.x:
-        return 180 - arctan
-    return arctan
+    if tan > 0:
+        if obj1[1] < obj2[1]:
+            value = 180 + arctan
+        else:
+            value = arctan
+    else:
+        if obj1[1] < obj2[1]:
+            value = arctan
+        else:
+            value = arctan + 180
+    if value >= 360:
+        value = value % 360
+    elif value < 0:
+        while value < 0:
+            value += 360
+    return round(value, 2)

@@ -7,7 +7,7 @@ W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
 W	P	P	P	P	P	P	W	P	P	P	P	P	P	P	P	P	P	P	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
+W	P	P	P	P	P_N	P	P	P	P	P	P	P	P	P	P	P	P	P	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
 W	P	P	P	P	P	P	P	P	W	P	P	P	P	P	P	P	P	P	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W

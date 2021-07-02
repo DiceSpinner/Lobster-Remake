@@ -2,8 +2,7 @@ import math
 
 import pygame
 from effect import *
-from typing import Tuple, Union, List, TypeVar, Optional
-from particles import Particle, Block, Creature, Item, Player
+from particles import *
 from utilities import Positional, Movable, Collidable
 from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
@@ -74,13 +73,20 @@ class GameMap:
             row = self.entities[i]
             for j in range(len(row)):
                 col = row[j]
+                popping = []
                 for k in range(len(col)):
                     entity = col[k]
                     if isinstance(entity, Movable):
                         self.entity_collision_check([i, j, k])
-                        self.entities[i][j].remove(entity)
-                        self.entities[int(entity.y // TILE_SIZE)][
-                            int(entity.x // TILE_SIZE)].append(entity)
+                    if not (entity.x // TILE_SIZE == j
+                            and entity.y // TILE_SIZE == i) or not \
+                            entity.map_name == self.name:
+                        popping.append(k)
+                        if self.name == entity.map_name:
+                            self.entities[int(entity.y // TILE_SIZE)][
+                                int(entity.x // TILE_SIZE)].append(entity)
+                for index in popping:
+                    self.entities[i][j].pop(index)
 
     def entity_collision_check(self, index: List[int]) -> None:
         row = index[0]
@@ -153,6 +159,9 @@ class Camera(Positional):
         self.map_name = self.particle.map_name
         self.x = self.particle.x - self.length / 2
         self.y = self.particle.y - self.width / 2
+        if isinstance(self.particle, Creature):
+            self.x += self.particle.diameter / 2
+            self.y += self.particle.diameter / 2
         current_map = self.game_maps[self.map_name]
         tile_size = current_map.tile_size
         self.max_x = current_map.length * tile_size - self.length
@@ -256,10 +265,15 @@ class Level:
             self._camera = Camera(player,
                                   screen.get_height(), screen.get_width(),
                                   self._game_maps)
-            player_key = list(Player.player_group)[0]
-            player = Player.player_group[player_key]
+        player_key = list(Player.player_group)[0]
+        player = Player.player_group[player_key]
 
         player_input = []
+        mouse_pos = pygame.mouse.get_pos()
+        pos = Positional({})
+        pos.x = mouse_pos[0] + self._camera.x
+        pos.y = mouse_pos[1] + self._camera.y
+        player.aim(pos)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
@@ -338,6 +352,10 @@ class Game:
     def run(self) -> None:
         clock = pygame.time.Clock()
         running = True
+        pygame.mouse.set_visible(False)
+        cursor_image = pygame.image.load(os.path.join("assets", "images",
+                                                      "cursor.png"))
+        cursor_image = pygame.transform.scale(cursor_image, (24, 24))
         while running:
             clock.tick(self.frame_rate)
             self._screen.fill((0, 0, 0))
@@ -350,6 +368,7 @@ class Game:
                 level.run(self._screen)
                 if not level.running:
                     running = False
+            self._screen.blit(cursor_image, pygame.mouse.get_pos())
             pygame.display.flip()
         pygame.quit()
 

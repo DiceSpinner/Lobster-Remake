@@ -1,3 +1,4 @@
 W Block diameter_int_64 shape_str_square texture_str_W-64.png
 P Block diameter_int_0 shape_str_square texture_str_P-64.png
-PY Player diameter_int_50 shape_str_circle texture_str_Lobster-64.png death_eval_[[('health','<','1')]]
+PY Player diameter_int_25 shape_str_circle texture_str_Lobster-64-0.png death_eval_[[('health','<','1')]] color_tuple_(255,255,0)
+N NPC diameter_int_25 shape_str_circle texture_str_Lobster-64-0.png death_eval_[[('health','<','1')]] color_tuple_(0,255,255)
