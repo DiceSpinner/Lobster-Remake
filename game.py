@@ -99,13 +99,15 @@ class GameMap:
                         if entity.light_source > 0:
                             self.light_blocks([i, j, k])
                     # update position in the map
-                    if not (entity.x // TILE_SIZE == j
-                            and entity.y // TILE_SIZE == i) or not \
+                    pos_x = round(entity.x - 1 + entity.diameter / 2, 0)
+                    pos_y = round(entity.y - 1 + entity.diameter / 2, 0)
+                    if not (pos_x // TILE_SIZE == j
+                            and pos_y // TILE_SIZE == i) or not \
                             entity.map_name == self.name:
                         popping.append(k)
                         if self.name == entity.map_name:
-                            self.entities[int(entity.y // TILE_SIZE)][
-                                int(entity.x // TILE_SIZE)].append(entity)
+                            self.entities[int(pos_y // TILE_SIZE)][
+                                int(pos_x // TILE_SIZE)].append(entity)
                 for index in popping:
                     self.entities[i][j].pop(index)
 

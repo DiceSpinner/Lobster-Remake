@@ -167,9 +167,9 @@ class Collidable(Positional):
             return False
         if c1y <= c2y - self.diameter:
             return False
-        if c1x - other.diameter >= c2x:
+        if c1x - other.diameter + 1 >= c2x:
             return False
-        if c1y - other.diameter >= c2y:
+        if c1y - other.diameter + 1 >= c2y:
             return False
         return True
 
