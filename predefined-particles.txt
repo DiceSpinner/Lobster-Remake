@@ -1,4 +1,4 @@
-W Block diameter_int_64 shape_str_square texture_str_W-64.png
-P Block diameter_int_0 shape_str_square texture_str_P-64.png
-PY Player diameter_int_25 shape_str_circle texture_str_Lobster-64-0.png death_eval_[[('health','<','1')]] color_tuple_(255,255,0)
-N NPC diameter_int_25 shape_str_circle texture_str_Lobster-64-0.png death_eval_[[('health','<','1')]] color_tuple_(0,255,255)
+W Block diameter~int~64 shape~str~square light_resistance~int~256 texture~str~W_64.png
+P Block diameter~int~0 shape~str~square light_resistance~int~40 texture~str~P_64.png
+PY Player diameter~int~25 shape~str~circle light_source~int~256 texture~str~Lobster_64_0.png death~eval~[[('health','<','1')]] color~tuple~(255,255,0)
+N NPC diameter~int~25 shape~str~circle texture~str~Lobster_64_0.png death~eval~[[('health','<','1')]] color~tuple~(0,255,255)

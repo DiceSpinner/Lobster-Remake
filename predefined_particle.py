@@ -34,7 +34,7 @@ class PredefinedParticle:
 
         # unpack the fields
         for field in fields:
-            field = field.rstrip().split('_')
+            field = field.rstrip().split('~')
             attr = field[0]
             data_type = field[1]
             value = field[2]

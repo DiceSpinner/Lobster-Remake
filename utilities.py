@@ -231,10 +231,10 @@ class Lightable:
     light_resistance: int
 
     def __init__(self, info: dict[str, Union[int, str]]) -> None:
-        attr = ['brightness', 'light_source']
+        attr = ['brightness', 'light_source', 'light_resistance']
         default = {
             'brightness': 100,
-            'light_source': 100,
+            'light_source': 0,
             'light_resistance': 10
         }
         for key in default:
@@ -244,10 +244,12 @@ class Lightable:
             setattr(self, a, info[a])
 
     def enlighten(self, other: Lightable) -> None:
-        """ Raise self and other lightbale object's brightness """
+        """ Raise self and other lightable object's brightness """
         if self.brightness < self.light_source:
             self.brightness = self.light_source
-        light_level = self.brightness - other.light_resistance
+        light_level = self.brightness - self.light_resistance
+        if light_level < 0:
+            light_level = 0
         if light_level > other.brightness:
             other.brightness = light_level
 

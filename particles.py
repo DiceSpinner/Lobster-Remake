@@ -69,7 +69,7 @@ class Item(Collidable):
     pass
 
 
-class Creature(Particle, Collidable, Movable, Living, Directional):
+class Creature(Particle, Collidable, Movable, Living, Directional, Lightable):
     """
     Description: Movable entities
 
@@ -92,6 +92,7 @@ class Creature(Particle, Collidable, Movable, Living, Directional):
         Collidable.__init__(self, info)
         Movable.__init__(self, info)
         Directional.__init__(self, info)
+        Lightable.__init__(self, info)
         Creature.creature_group[self.id] = self
         self.texture = pygame.transform.scale(self.texture, (self.diameter * 2,
                                                              self.diameter * 2))
@@ -289,16 +290,6 @@ class Block(Particle, Collidable, Lightable):
         Lightable.__init__(self, info)
         self.texture = pygame.transform.scale(self.texture, (TILE_SIZE,
                                                              TILE_SIZE))
-
-    def display(self, screen: pygame.Surface,
-                location: Tuple[float, float]) -> None:
-        screen.blit(self.texture, [location[0], location[1]])
-
-        dark = pygame.Surface((self.diameter,
-                               self.diameter))
-        dark.fill((0, 0, 0))
-        dark.set_alpha(255 - self.brightness)
-        # screen.blit(dark, [location[0], location[1]])
 
 
 class NPC(Creature):

@@ -68,7 +68,22 @@ class GameMap:
                             self.entities[i][j].append(par)
 
     def update_content(self):
-        """ Update the location of entities """
+        """ Update the location/status of entities and blocks """
+        self.update_entities()
+        self.update_blocks()
+
+    def update_blocks(self):
+        for i in range(len(self.blocks)):
+            row = self.blocks[i]
+            for j in range(len(row)):
+                tile = row[j]
+                popping = []
+                # lighting blocks
+                if isinstance(tile, Lightable):
+                    if tile.light_source > 0:
+                        self.light_blocks([i, j])
+
+    def update_entities(self):
         for i in range(len(self.entities)):
             row = self.entities[i]
             for j in range(len(row)):
@@ -76,8 +91,14 @@ class GameMap:
                 popping = []
                 for k in range(len(col)):
                     entity = col[k]
+                    # movement collision check
                     if isinstance(entity, Movable):
                         self.entity_collision_check([i, j, k])
+                    # lighting blocks
+                    if isinstance(entity, Lightable):
+                        if entity.light_source > 0:
+                            self.light_blocks([i, j, k])
+                    # update position in the map
                     if not (entity.x // TILE_SIZE == j
                             and entity.y // TILE_SIZE == i) or not \
                             entity.map_name == self.name:
@@ -115,6 +136,45 @@ class GameMap:
                 checking.append(tile)
                 checking += entities
         entity.update_position(checking)
+
+    def light_blocks(self, coordinates: List[int]) -> None:
+        i = coordinates[0]
+        j = coordinates[1]
+        # entity lights block
+        if len(coordinates) == 3:
+            k = coordinates[2]
+            entity = self.entities[i][j][k]
+            block = self.blocks[i][j]
+            assert isinstance(entity, Lightable)
+            assert isinstance(block, Lightable)
+            before = block.brightness
+            entity.enlighten(block)
+            after = block.brightness
+            if not after == before:
+                self.light_blocks([i, j])
+        # block lights other blocks
+        elif len(coordinates) == 2:
+            max_i = len(self.blocks) - 1
+            max_j = len(self.blocks[i]) - 1
+            min_i = 0
+            min_j = 0
+            lighting = []
+            tile = self.blocks[i][j]
+            if i - 1 >= min_i:
+                lighting.append([i - 1, j])
+            if i + 1 <= max_i:
+                lighting.append([i + 1, j])
+            if j - 1 >= min_j:
+                lighting.append([i, j - 1])
+            if j + 1 <= max_j:
+                lighting.append([i, j + 1])
+            for coor in lighting:
+                block = self.blocks[coor[0]][coor[1]]
+                before = block.brightness
+                tile.enlighten(block)
+                after = block.brightness
+                if not before == after:
+                    self.light_blocks(coor)
 
 
 class Camera(Positional):
@@ -184,6 +244,7 @@ class Camera(Positional):
         end_row = int(math.ceil((self.x + self.length) / TILE_SIZE))
         start_col = int(self.y // TILE_SIZE)
         end_col = int(math.ceil((self.y + self.width) / TILE_SIZE))
+        # add tiles & entities to the queue
         for i in range(start_row, end_row):
             for j in range(start_col, end_col):
                 tile = current_map.blocks[j][i]
@@ -193,11 +254,28 @@ class Camera(Positional):
                     display_y = round(item.y - self.y)
                     displaying[item.id] = (display_x, display_y)
         queue = PriorityQueue(compare_by_display_priority)
+
+        # display items by their priority
         for key in displaying:
             queue.enqueue(Particle.particle_group[key])
         while not queue.is_empty():
             item = queue.dequeue()
             item.display(screen, displaying[item.id])
+
+        # display brightness
+        # font = pygame.font.Font(None, 25)
+        for i in range(start_row, end_row):
+            for j in range(start_col, end_col):
+                tile = current_map.blocks[j][i]
+                dark = pygame.Surface((TILE_SIZE,
+                                      TILE_SIZE))
+                dark.fill((0, 0, 0))
+                dark.set_alpha(255 - tile.brightness)
+                display_x = round(tile.x - self.x)
+                display_y = round(tile.y - self.y)
+                screen.blit(dark, (display_x, display_y))
+                # num = font.render(str(tile.brightness), True, (255, 255, 0))
+                # screen.blit(num, (display_x, display_y))
 
 
 class Level:
@@ -269,19 +347,31 @@ class Level:
         player = Player.player_group[player_key]
 
         player_input = []
+        # mouse tracking
         mouse_pos = pygame.mouse.get_pos()
         pos = Positional({})
         pos.x = mouse_pos[0] + self._camera.x
         pos.y = mouse_pos[1] + self._camera.y
         player.aim(pos)
+
+        # player input and other game actions
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.KEYUP or event.type == pygame.KEYDOWN:
                 player_input.append(event)
+
+        # reset light levels
+        for particle in Particle.particle_group:
+            particle = Particle.particle_group[particle]
+            if isinstance(particle, Lightable):
+                particle.reset()
+
+        # creature actions
         for creature in Creature.creature_group:
             Creature.creature_group[creature].action(player_input)
 
+        # game map update status
         for game_map in self._game_maps:
             game_map = self._game_maps[game_map]
             game_map.update_content()
@@ -326,6 +416,7 @@ class Game:
         self._selected_level = -1
         pygame.init()
         pygame.mixer.init()
+        pygame.font.init()
         self._apply_settings()
         self._levels = []
         self._load_level()
