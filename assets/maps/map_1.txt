@@ -1,21 +1,31 @@
-TestMap 20 20
-W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P_PY	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	W	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P_N	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	W	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W
-W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W
+TestMap 30 30
+W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P_PY	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	P	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	W	W	W	P	P	P	P	P	P	P	P	P	W	W	W	P	P	P	P	W	W	W	W
+W	P	P	P	P	P	P	P	P	W	P	P	P	P	P	P	P	P	P	W	W	W	P	W	W	W	W	W	W	W
+W	P	P	P	P	P_N	P	P	P	W	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	P	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	W	P	P	P	P	P	P	P	P	P	W	W	W	P	P	P	P	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	P	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	P	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	P	P	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	W	W	P	W	W	W	W	W	W	W	W	P	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W

@@ -35,7 +35,7 @@ class EffectSubjectError(Exception):
         return 'The particle being applied by this effect must be its subject.'
 
 
-class UnknownTypeError:
+class UnknownTypeError(Exception):
     """Exception raised when receiving unexpected input data type.
     """
 
@@ -44,10 +44,37 @@ class UnknownTypeError:
         return 'Unknown datatype.'
 
 
-class UnknownShapeError:
+class UnknownShapeError(Exception):
     """Exception raised when receiving unexpected shape of the object.
     """
 
     def __str__(self) -> str:
         """ Return a string representation of this error. """
         return 'Object shape unknown.'
+
+
+class MainConnectiveError(Exception):
+    """Exception raised when there's no main connective in the bool expr.
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'Main connective DNE'
+
+
+class AttackOnCoolDownError(Exception):
+    """Exception raised when the attack is still on cool down.
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'Attack still on cool down!'
+
+
+class InvalidConstructionInfo(Exception):
+    """ Exception raised when the provided info to initialize a particle is not valid
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'Invalid construction info!'

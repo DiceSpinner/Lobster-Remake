@@ -3,7 +3,8 @@ import math
 import pygame
 from effect import *
 from particles import *
-from utilities import Positional, Movable, Collidable
+from utilities import Positional, Movable, Collidable, Attackable, \
+    DynamicStats
 from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
 from settings import *
@@ -20,15 +21,15 @@ class GameMap:
     === Public Attributes ===
     name: name of the map
     tile_size: the size of each tile in pixels
-    length: length of the map (in tiles)
+    height: height of the map (in tiles)
     width: width of the map (in tiles)
     blocks: blocks of the map
     entities: creatures and items inside the map
     """
     name: str
     tile_size: int
-    length: int
     width: int
+    height: int
     blocks: List[List[Block]]
     entities: List[List[List[Union[Creature, Item]]]]
 
@@ -39,8 +40,8 @@ class GameMap:
             lines = file.readlines()
             info = lines[0].split(" ")
             self.name = info[0]
-            self.length = int(info[1])
-            self.width = int(info[2])
+            self.width = int(info[1])
+            self.height = int(info[2])
 
             rows = lines[1:]
             self.blocks = []
@@ -67,116 +68,61 @@ class GameMap:
                         else:
                             self.entities[i][j].append(par)
 
-    def update_content(self):
-        """ Update the location/status of entities and blocks """
-        self.update_entities()
-        self.update_blocks()
-
-    def update_blocks(self):
-        for i in range(len(self.blocks)):
-            row = self.blocks[i]
-            for j in range(len(row)):
-                tile = row[j]
-                popping = []
-                # lighting blocks
-                if isinstance(tile, Lightable):
-                    if tile.light_source > 0:
-                        self.light_blocks([i, j])
-
     def update_entities(self):
-        for i in range(len(self.entities)):
-            row = self.entities[i]
-            for j in range(len(row)):
-                col = row[j]
+        for i in range(self.height):
+            for j in range(self.width):
+                e = self.entities[i][j]
                 popping = []
-                for k in range(len(col)):
-                    entity = col[k]
-                    # movement collision check
-                    if isinstance(entity, Movable):
-                        self.entity_collision_check([i, j, k])
-                    # lighting blocks
-                    if isinstance(entity, Lightable):
-                        if entity.light_source > 0:
-                            self.light_blocks([i, j, k])
-                    # update position in the map
-                    pos_x = round(entity.x - 1 + entity.diameter / 2, 0)
-                    pos_y = round(entity.y - 1 + entity.diameter / 2, 0)
-                    if not (pos_x // TILE_SIZE == j
-                            and pos_y // TILE_SIZE == i) or not \
-                            entity.map_name == self.name:
-                        popping.append(k)
-                        if self.name == entity.map_name:
-                            self.entities[int(pos_y // TILE_SIZE)][
-                                int(pos_x // TILE_SIZE)].append(entity)
-                for index in popping:
-                    self.entities[i][j].pop(index)
+                for entity in e:
+                    if isinstance(entity, Living):
+                        if entity.is_dead():
+                            popping.append(entity)
+                            entity.die()
+                            continue
+                    if isinstance(entity, Collidable):
+                        col = int((entity.x - 1 + entity.diameter / 2) // TILE_SIZE)
+                        row = int((entity.y - 1 + entity.diameter / 2) // TILE_SIZE)
+                    else:
+                        col = int(entity.x // TILE_SIZE)
+                        row = int(entity.y // TILE_SIZE)
+                    if not i == row or not j == col:
+                        popping.append(entity)
+                        self.entities[row][col].append(entity)
+                        continue
+                for entity in popping:
+                    e.remove(entity)
 
-    def entity_collision_check(self, index: List[int]) -> None:
-        row = index[0]
-        col = index[1]
-        k = index[2]
-        start_row = row - 1
-        start_col = col - 1
-        end_row = row + 1
-        end_col = col + 1
-        entity = self.entities[row][col][k]
+    def update_surroundings(self, particle: Particle) -> None:
+        """ Feed the map info to the selected particle """
+        if isinstance(particle, Collidable):
+            cx = particle.x - 1 + particle.diameter / 2
+            cy = particle.y - 1 + particle.diameter / 2
+        else:
+            cx = particle.x
+            cy = particle.y
+        col = int(cx // TILE_SIZE)
+        row = int(cy // TILE_SIZE)
+        start_col = col - particle.detection_radius
+        end_col = col + particle.detection_radius
+        start_row = row - particle.detection_radius
+        end_row = row + particle.detection_radius
         if start_row < 0:
             start_row = 0
+        if end_row >= self.height:
+            end_row = self.height - 1
         if start_col < 0:
             start_col = 0
-        if end_row >= len(self.entities):
-            end_row = len(self.entities) - 1
-        if end_col >= len(self.entities[end_row]):
-            end_col = len(self.entities[end_row]) - 1
-        checking = []
+        if end_col >= self.width:
+            end_col = self.width - 1
+        tiles = {}
+        entities = {}
         for i in range(start_row, end_row + 1):
+            entities[i] = {}
+            tiles[i] = {}
             for j in range(start_col, end_col + 1):
-                tile = self.blocks[i][j]
-                entities = self.entities[i][j][:]
-                if i == row and j == col:
-                    entities.pop(k)
-                checking.append(tile)
-                checking += entities
-        entity.update_position(checking)
-
-    def light_blocks(self, coordinates: List[int]) -> None:
-        i = coordinates[0]
-        j = coordinates[1]
-        # entity lights block
-        if len(coordinates) == 3:
-            k = coordinates[2]
-            entity = self.entities[i][j][k]
-            block = self.blocks[i][j]
-            assert isinstance(entity, Lightable)
-            assert isinstance(block, Lightable)
-            before = block.brightness
-            entity.enlighten(block)
-            after = block.brightness
-            if not after == before:
-                self.light_blocks([i, j])
-        # block lights other blocks
-        elif len(coordinates) == 2:
-            max_i = len(self.blocks) - 1
-            max_j = len(self.blocks[i]) - 1
-            min_i = 0
-            min_j = 0
-            lighting = []
-            tile = self.blocks[i][j]
-            if i - 1 >= min_i:
-                lighting.append([i - 1, j])
-            if i + 1 <= max_i:
-                lighting.append([i + 1, j])
-            if j - 1 >= min_j:
-                lighting.append([i, j - 1])
-            if j + 1 <= max_j:
-                lighting.append([i, j + 1])
-            for coor in lighting:
-                block = self.blocks[coor[0]][coor[1]]
-                before = block.brightness
-                tile.enlighten(block)
-                after = block.brightness
-                if not before == after:
-                    self.light_blocks(coor)
+                entities[i][j] = self.entities[i][j][:]
+                tiles[i][j] = self.blocks[i][j]
+        particle.update_surroundings(tiles, entities)
 
 
 class Camera(Positional):
@@ -194,7 +140,7 @@ class Camera(Positional):
     - min_y: minimum y-coordinate of the camera on the current map
     """
     game_maps: dict[str, GameMap]
-    length: int
+    height: int
     width: int
     particle: Particle
     max_x: int
@@ -203,13 +149,13 @@ class Camera(Positional):
     min_y: int
 
     def __init__(self, particle: Particle,
-                 length: int, width: int,
+                 height: int, width: int,
                  game_maps: dict[str, GameMap]) -> None:
         Positional.__init__(self, {"map_name": particle.map_name})
         self.particle = particle
         self.game_maps = game_maps
         self.width = width
-        self.length = length
+        self.height = height
         self.min_x = 0
         self.min_y = 0
         self.sync()
@@ -219,15 +165,15 @@ class Camera(Positional):
         Synchronize the position of this camera with the particle
         """
         self.map_name = self.particle.map_name
-        self.x = self.particle.x - self.length / 2
-        self.y = self.particle.y - self.width / 2
+        self.x = self.particle.x - self.width / 2
+        self.y = self.particle.y - self.height / 2
         if isinstance(self.particle, Creature):
             self.x += self.particle.diameter / 2
             self.y += self.particle.diameter / 2
         current_map = self.game_maps[self.map_name]
         tile_size = current_map.tile_size
-        self.max_x = current_map.length * tile_size - self.length
-        self.max_y = current_map.width * tile_size - self.width
+        self.max_x = current_map.width * tile_size - self.width
+        self.max_y = current_map.height * tile_size - self.height
         if self.x > self.max_x:
             self.x = self.max_x
         elif self.x < self.min_x:
@@ -243,14 +189,25 @@ class Camera(Positional):
         current_map = self.game_maps[self.map_name]
         displaying = {}
         start_row = int(self.x // TILE_SIZE)
-        end_row = int(math.ceil((self.x + self.length) / TILE_SIZE))
+        end_row = int(math.ceil((self.x + self.width) / TILE_SIZE))
         start_col = int(self.y // TILE_SIZE)
-        end_col = int(math.ceil((self.y + self.width) / TILE_SIZE))
+        end_col = int(math.ceil((self.y + self.height) / TILE_SIZE))
         # add tiles & entities to the queue
         for i in range(start_row, end_row):
             for j in range(start_col, end_col):
                 tile = current_map.blocks[j][i]
-                items = [tile] + current_map.entities[j][i]
+                items = []
+                if tile.get_stat('brightness') > 0:
+                    items.append(tile)
+                    items += current_map.entities[j][i]
+                else:
+                    tiles = tile.get_adjacent_tiles()
+                    for t in tiles:
+                        if t.get_stat('brightness') > 0:
+                            for entity in current_map.entities[j][i]:
+                                if entity.detect_collision(t):
+                                    items.append(entity)
+                            break
                 for item in items:
                     display_x = round(item.x - self.x)
                     display_y = round(item.y - self.y)
@@ -265,19 +222,28 @@ class Camera(Positional):
             item.display(screen, displaying[item.id])
 
         # display brightness
-        # font = pygame.font.Font(None, 25)
+        font = pygame.font.Font(None, 25)
         for i in range(start_row, end_row):
             for j in range(start_col, end_col):
                 tile = current_map.blocks[j][i]
                 dark = pygame.Surface((TILE_SIZE,
-                                      TILE_SIZE))
+                                       TILE_SIZE))
                 dark.fill((0, 0, 0))
-                dark.set_alpha(255 - tile.brightness)
-                display_x = round(tile.x - self.x)
-                display_y = round(tile.y - self.y)
-                screen.blit(dark, (display_x, display_y))
-                # num = font.render(str(tile.brightness), True, (255, 255, 0))
-                # screen.blit(num, (display_x, display_y))
+                adjacent = tile.get_adjacent_tiles(True)
+                flag = False
+                for t in adjacent:
+                    if t.get_stat("brightness") > 0:
+                        flag = True
+                        break
+                if tile.get_stat('brightness') > 0 or flag:
+                    if tile.get_stat('brightness') > 0:
+                        dark.set_alpha(255 - tile.get_stat('brightness'))
+                    display_x = round(tile.x - self.x)
+                    display_y = round(tile.y - self.y)
+                    screen.blit(dark, (display_x, display_y))
+                    num = font.render(str(tile.get_stat('brightness')), True,
+                                      (255, 255, 0))
+                    screen.blit(num, (display_x + tile.diameter // 3, display_y + tile.diameter // 3))
 
 
 class Level:
@@ -349,6 +315,7 @@ class Level:
         player = Player.player_group[player_key]
 
         player_input = []
+
         # mouse tracking
         mouse_pos = pygame.mouse.get_pos()
         pos = Positional({})
@@ -360,26 +327,46 @@ class Level:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            elif event.type == pygame.KEYUP or event.type == pygame.KEYDOWN:
+            elif event.type == pygame.KEYUP or event.type == pygame.KEYDOWN or \
+                    event.type == pygame.MOUSEBUTTONDOWN:
                 player_input.append(event)
 
-        # reset light levels
+        # update entity surroundings
+        for game_map in self._game_maps:
+            self._game_maps[game_map].update_entities()
         for particle in Particle.particle_group:
             particle = Particle.particle_group[particle]
-            if isinstance(particle, Lightable):
-                particle.reset()
-
+            self._game_maps[particle.map_name].update_surroundings(particle)
         # creature actions
         for creature in Creature.creature_group:
             Creature.creature_group[creature].action(player_input)
 
-        # game map update status
-        for game_map in self._game_maps:
-            game_map = self._game_maps[game_map]
-            game_map.update_content()
+        # particle status update
+        for particle in Particle.particle_group.copy():
+            particle = Particle.particle_group[particle]
+            if isinstance(particle, Living):
+                if particle.is_dead():
+                    pass
 
+        # lighting
+        for creature in Creature.creature_group:
+            creature = Creature.creature_group[creature]
+            if creature.get_stat('light_source') > 0 and creature.light_on:
+                creature.light()
+        for block in Block.block_group:
+            block = Block.block_group[block]
+            if block.get_stat('light_source') > 0:
+                block.light()
+
+        # display
         self._camera.sync()
         self._camera.display(screen)
+
+        # reset buffer
+        for particle in Particle.particle_group:
+            particle = Particle.particle_group[particle]
+            if isinstance(particle, DynamicStats):
+                particle.reset()
 
     def exit(self):
         """
@@ -504,7 +491,7 @@ def _square_square(c1: Collidable, c2: Collidable) -> None:
     print("Call:.......................................")
     for corner in corners:
         if c2.x <= corner[0] <= c2.x + c2.diameter and c2.y <= corner[
-             1] <= c2.y + c2.diameter:
+            1] <= c2.y + c2.diameter:
             collided.append(corner)
     left = ((c2.x - 1, c2.y - 1), (c2.x - 1, c2.y + c2.diameter + 1))
     up = ((c2.x - 1, c2.y - 1), (c2.x + 1 + c2.diameter, c2.y - 1))

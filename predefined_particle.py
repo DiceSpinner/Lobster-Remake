@@ -1,5 +1,6 @@
 from typing import Union, List, Tuple
 from error import UnknownTypeError
+from bool_expr import construct_from_str, BoolExpr
 
 
 class PredefinedParticle:
@@ -12,7 +13,7 @@ class PredefinedParticle:
         - Particle: display_priority, texture
         - Creature/Block: diameter, brightness, light_power, health, shape
     """
-    info: dict[str, Union[str, int, float, bool, List, Tuple]]
+    info: dict[str, Union[str, int, float, bool, List, Tuple, BoolExpr]]
 
     def __init__(self, content: str) -> None:
         """ Construct the dictionary representation of the particle with the
@@ -22,7 +23,7 @@ class PredefinedParticle:
         """
         self.info = {}
         # split the string into segments
-        content = content.split(' ')
+        content = content.split('  ')
 
         # separate class name and its fields
         particle_name = content[0].rstrip()
@@ -51,6 +52,8 @@ class PredefinedParticle:
             elif data_type == 'tuple':
                 value = value[1:len(value) - 1]
                 self.info[attr] = tuple(map(int, value.split(',')))
+            elif data_type == 'BoolExpr':
+                self.info[attr] = construct_from_str(value)
             else:
                 raise UnknownTypeError
 

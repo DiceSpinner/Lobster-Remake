@@ -1,8 +1,53 @@
 from __future__ import annotations
 from typing import Union, List, Optional, Any, Tuple
 from error import UnknownShapeError
-from bool_expr import BoolExpr, construct_from_list
+from bool_expr import BoolExpr, construct_from_list, construct_from_str
+from settings import *
 import math
+
+
+class DynamicStats:
+    """ Objects with dynamic stats.
+    i.e The actual attack damage the player can deal is the sum of his
+    base attack damage and attack bonus from item/effect. This can change
+    dynamically when the player loses/gain item/effect.
+
+    === Private Attributes ===
+    - _buffer_stats: A collection of external applied stats
+    """
+    _buffer_stats: dict[str, Any]
+
+    def __init__(self) -> None:
+        """ Initialize a set of additional attributes """
+        self._buffer_stats = {}
+
+    def add_stats(self, info: dict[str, Any]) -> None:
+        """ Add external stats to the buffer """
+        for data in info:
+            if hasattr(self, data):
+                if data not in self._buffer_stats:
+                    self._buffer_stats[data] = info[data]
+                elif not isinstance(info[data], int) and not isinstance(
+                        info[data], float):
+                    self._buffer_stats[data] = info[data]
+                else:
+                    self._buffer_stats[data] += info[data]
+
+    def get_stat(self, item: str) -> Any:
+        if not hasattr(self, item):
+            raise AttributeError
+        col = vars(self)
+        if item in self._buffer_stats:
+            if not isinstance(col[item], int) and not isinstance(
+                    col[item], float):
+                return self._buffer_stats[item]
+            else:
+                return col[item] + self._buffer_stats[item]
+        else:
+            return col[item]
+
+    def reset(self):
+        self._buffer_stats = {}
 
 
 class Positional:
@@ -27,7 +72,7 @@ class Positional:
                 setattr(self, item, info[item])
 
 
-class Movable(Positional):
+class Movable(Positional, DynamicStats):
     """ An interface that provides movement methods in addition to positional
         attributes.
 
@@ -36,6 +81,7 @@ class Movable(Positional):
     - vy: Velocity of the object in y-direction
     - ax: Acceleration of the object in x-direction
     - ay: Acceleration of the object in y-direction
+    - dynamic stats
     """
     vx: float
     vy: float
@@ -61,7 +107,9 @@ class Movable(Positional):
             if item in attr:
                 setattr(self, item, info[item])
 
-    def update_position(self, parameter: Optional[Any]) -> None:
+        DynamicStats.__init__(self)
+
+    def update_position(self) -> None:
         """
         Update the object's position.
         """
@@ -73,8 +121,8 @@ class Movable(Positional):
             direction = get_direction((self.x, self.y), (direction.x,
                                                          direction.y))
         direction = math.radians(direction)
-        self.vx = self.speed * round(math.cos(direction), 2)
-        self.vy = - self.speed * round(math.sin(direction), 2)
+        self.add_stats({'vx': self.get_stat('speed') * round(math.cos(direction), 2)})
+        self.add_stats({'vy': - self.get_stat('speed') * round(math.sin(direction), 2)})
 
 
 class Directional(Positional):
@@ -112,23 +160,28 @@ class Directional(Positional):
         self.direction = direction
 
 
-class Collidable(Positional):
+class Collidable(Positional, DynamicStats):
     """ Description: Collision interface supports square and circle
     shaped objects
 
     === Public Attributes ===
     - diameter: collision diameter of the object
     - shape: shape of the object
+    - solid: whether this object can be passed through by other objects
     """
+
     diameter: int
     shape: str
+    solid: bool
 
     def __init__(self, info: dict[str, Union[int, str]]) -> None:
         Positional.__init__(self, info)
-        attr = ['diameter', 'shape']
+        attr = ['diameter', 'shape', 'solid']
+        dynamic_stats = ['diameter', 'shape', 'solid']
         default = {
             'diameter': 30,
-            'shape': 'square'
+            'shape': 'square',
+            'solid': False
         }
 
         for key in default:
@@ -136,6 +189,7 @@ class Collidable(Positional):
                 info[key] = default[key]
         for a in attr:
             setattr(self, a, info[a])
+        DynamicStats.__init__(self)
 
     def detect_collision(self, other: Collidable) -> bool:
         if other.diameter == 0 or self.diameter == 0:
@@ -213,7 +267,7 @@ class Collidable(Positional):
         return other._square_circle(self)
 
 
-class Lightable:
+class Lightable(DynamicStats):
     """ Description: Light interface
 
     === Public Attributes ===
@@ -233,7 +287,7 @@ class Lightable:
     def __init__(self, info: dict[str, Union[int, str]]) -> None:
         attr = ['brightness', 'light_source', 'light_resistance']
         default = {
-            'brightness': 100,
+            'brightness': 0,
             'light_source': 0,
             'light_resistance': 10
         }
@@ -242,56 +296,104 @@ class Lightable:
                 info[key] = default[key]
         for a in attr:
             setattr(self, a, info[a])
+        DynamicStats.__init__(self)
 
     def enlighten(self, other: Lightable) -> None:
         """ Raise self and other lightable object's brightness """
-        if self.brightness < self.light_source:
-            self.brightness = self.light_source
-        light_level = self.brightness - self.light_resistance
+        if self.get_stat('brightness') < self.get_stat('light_source'):
+            self.add_stats({'brightness': self.get_stat('light_source') -
+                            self.get_stat('brightness')})
+        light_level = self.get_stat('brightness') - \
+            self.get_stat('light_resistance')
         if light_level < 0:
-            light_level = 0
-        if light_level > other.brightness:
-            other.brightness = light_level
-
-    def reset(self):
-        """ Reset the brightness, this method should be called on each lightable
-        object once per frame
-         """
-        self.brightness = 0
+            return
+        if light_level > other.get_stat('brightness'):
+            other.add_stats({'brightness': light_level -
+                            other.get_stat('brightness')})
 
 
-class Living:
+class Living(DynamicStats):
     """ Description: Interface for living objects
 
     === Public Attributes ===
     - health: The health of the object
+    - max_health: The maximum hit points of the object
     - death: Whether this object is dead
     """
     health: float
+    max_health: float
     death: BoolExpr
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
-        attr = ['brightness', 'light_source']
+        attr = ['health', 'max_health', 'death']
         default = {
-            'health': 100,
-            'death': [[('health', '< 1')]]
+            'health': DEFAULT_HEALTH,
+            'max_health': DEFAULT_MAX_HEALTH,
+            'death': construct_from_str("( not health > 0 )")
         }
         for key in default:
             if key not in info:
                 info[key] = default[key]
-        setattr(self, 'health', info['health'])
-        self.death = construct_from_list(info['death'])
+        for a in attr:
+            setattr(self, a, info[a])
+        DynamicStats.__init__(self)
 
     def is_dead(self) -> bool:
         """ Check whether this object is dead """
+        return self.get_stat('death').eval(vars(self))
+
+    def die(self):
         raise NotImplementedError
 
-    def update_status(self) -> None:
-        """ Update the status of the object """
+
+class Attackable(DynamicStats):
+    """ Attacking Interface that provides offensive movements
+
+    === Public Attributes ===
+    - attack_power: The strength of the attack
+    - attack_speed: Number of frames between each attacks
+    - attack_range: The range of the attack
+
+    === Private Attributes ===
+    - attack_counter: Time counter for attacks
+    """
+
+    attack_power: float
+    attack_speed: int
+    attack_range: int
+    _attack_counter: int
+
+    def __init__(self, info: dict[str, Union[int, float]]) -> None:
+        self._attack_counter = 0
+        attr = ['attack_power', 'attack_speed', 'attack_range']
+        default = {
+            'attack_power': DEFAULT_ATTACK_DAMAGE,
+            'attack_speed': DEFAULT_ATTACK_SPEED,
+            'attack_range': DEFAULT_ATTACK_RANGE,
+            '_attack_counter': 0
+        }
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+        for a in attr:
+            setattr(self, a, info[a])
+        DynamicStats.__init__(self)
+
+    def count(self) -> None:
+        """ Increase the attack counter by 1 each frame. """
+        if self._attack_counter < self.attack_speed:
+            self._attack_counter += 1
+
+    def can_attack(self) -> bool:
+        return self._attack_counter >= self.attack_speed
+
+    def attack(self, targets: Optional[List[Living]]) -> None:
+        """ Perform an attack and reset the attack counter """
         raise NotImplementedError
 
 
-def get_direction(obj1: Tuple[float, float], obj2: Tuple[float, float]) -> float:
+def get_direction(obj1: Tuple[float, float], obj2: Tuple[float, float]) \
+        -> float:
     """ Get direction of the obj2 from obj1
 
     >>> p1 = (0, 0)

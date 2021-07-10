@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Union, List, Optional, Dict, Any, Tuple
 from data_structures import Queue
-from error import IllegalConditionalOperatorError, NoneConditionError
+from error import IllegalConditionalOperatorError, NoneConditionError, \
+    MainConnectiveError
 
 OP_AND = 'and'
 OP_OR = 'or'
@@ -207,3 +208,89 @@ def construct_from_list(
         p[1].append(sub)
 
     return exp
+
+
+def construct_from_str(info: str) -> BoolExpr:
+    """ Construct a BoolExpr with the input string.
+
+    Pre-condition: info follows the string format of BoolExpr
+
+    >>> s = "( health > 0 or speed > 0 )"
+    >>> b1 = construct_from_str(s)
+    >>> print(b1)
+    ( health > 0 or speed > 0 )
+    >>> s = "( not ( health > 0 and speed > 0 ) )"
+    >>> b2 = construct_from_str(s)
+    >>> print(b2)
+    ( not ( health > 0 and speed > 0 ) )
+    >>> s = "( ( b > 0 and c > 0 ) or a = 10 )"
+    >>> b3 = construct_from_str(s)
+    >>> print(b3)
+    ( ( b > 0 and c > 0 ) or a = 10 )
+    >>> s = "health > 0"
+    >>> b4 = construct_from_str(s)
+    >>> print(b4)
+    health > 0
+    >>> s = "( not vision = 6 )"
+    >>> b5 = construct_from_str(s)
+    >>> print(s)
+    ( not vision = 6 )
+    """
+    lst = [[]]
+    info = info.split(" ")
+    queue = Queue()
+    queue.enqueue((info, 0))
+    i = 0
+    while not queue.is_empty():
+        raw = queue.dequeue()
+        item = raw[0]
+        index = raw[1]
+        try:
+            result = _main_connective_separate(item)
+            lst[index].append(result['main_connective'])
+            lst.append([])
+            i += 1
+            for item in result['expr']:
+                queue.enqueue((item, i))
+        except MainConnectiveError:
+            if item[0] == "(" and item[-1] == ")":
+                item = item[1:-1]
+            attr = item[0]
+            comparator = item[1]
+            value = item[2]
+            lst[index].append((attr, comparator, value))
+    return construct_from_list(lst)
+
+
+def _main_connective_separate(items: List[str]) -> \
+        Dict[str, Union[List[List[str]], str]]:
+    """ Separate the main connective from the rest of the bool expression
+
+    >>> l = ['(', 'health', ">", '0', 'or', 'speed', '>', '0', ')']
+    >>> r = _main_connective_separate(l)
+    >>> print(r)
+    {'main_connective': 'or', 'expr': [['health', '>', '0'], ['speed', '>', '0']]}
+    """
+    lst = {
+        'main_connective': 0,
+        'expr': []
+    }
+    if items[0] == "(" and items[-1] == ")":
+        items = items[1:-1]
+    else:
+        raise MainConnectiveError
+    count = 0
+    for i in range(len(items)):
+        item = items[i]
+        if item == '(':
+            count += 1
+        elif item == ')':
+            count -= 1
+        elif count == 0 and item in OPERATORS:
+            lst['main_connective'] = item
+            if i == 0:
+                lst['expr'].append(items[1:])
+            else:
+                lst['expr'].append(items[:i])
+                lst['expr'].append(items[i + 1:])
+    return lst
