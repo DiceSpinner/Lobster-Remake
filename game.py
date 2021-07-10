@@ -30,8 +30,12 @@ class GameMap:
     tile_size: int
     width: int
     height: int
+    all_blocks: List[Block]
     blocks: List[List[Block]]
+    all_entities: List[Union[Creature, Item]]
     entities: List[List[List[Union[Creature, Item]]]]
+    collision_boxs: List[List[List[CollisionBox]]]
+    all_collision_boxs: List[CollisionBox]
 
     def __init__(self, location: str,
                  look_up: dict[str, PredefinedParticle]) -> None:
@@ -46,15 +50,21 @@ class GameMap:
             rows = lines[1:]
             self.blocks = []
             self.entities = []
+            self.collision_boxs = []
+            self.all_blocks = []
+            self.all_entities = []
+            self.all_collision_boxs = []
             for i in range(len(rows)):
                 pos_y = i * TILE_SIZE
                 row = rows[i].rstrip()
                 self.blocks.append([])
                 self.entities.append([])
+                self.collision_boxs.append([])
                 row = row.split("	")
                 for j in range(len(row)):
                     pos_x = j * TILE_SIZE
                     self.entities[i].append([])
+                    self.collision_boxs[i].append([])
                     col = row[j].split('_')
                     for particle in col:
                         pre_p = look_up[particle]
@@ -65,32 +75,44 @@ class GameMap:
                         par = particle_class(pre_p.info)
                         if isinstance(par, Block):
                             self.blocks[i].append(par)
-                        else:
+                            self.all_blocks.append(par)
+                        elif isinstance(par, Creature) or isinstance(par, Item):
                             self.entities[i][j].append(par)
+                            self.all_entities.append(par)
+                        else:
+                            self.collision_boxs[i][j].append(par)
+                            self.all_collision_boxs.append(par)
 
-    def update_entities(self):
+    def clear_content(self):
         for i in range(self.height):
             for j in range(self.width):
-                e = self.entities[i][j]
-                popping = []
-                for entity in e:
-                    if isinstance(entity, Living):
-                        if entity.is_dead():
-                            popping.append(entity)
-                            entity.die()
-                            continue
-                    if isinstance(entity, Collidable):
-                        col = int((entity.x - 1 + entity.diameter / 2) // TILE_SIZE)
-                        row = int((entity.y - 1 + entity.diameter / 2) // TILE_SIZE)
-                    else:
-                        col = int(entity.x // TILE_SIZE)
-                        row = int(entity.y // TILE_SIZE)
-                    if not i == row or not j == col:
-                        popping.append(entity)
-                        self.entities[row][col].append(entity)
-                        continue
-                for entity in popping:
-                    e.remove(entity)
+                self.entities[i][j] = []
+                self.collision_boxs[i][j] = []
+
+    def update_contents(self):
+        self.clear_content()
+        ep = []
+        cp = []
+        for entity in self.all_entities:
+            if entity.id not in Particle.particle_group or not \
+                    entity.map_name == self.name:
+                ep.append(entity)
+                continue
+            col = int((entity.x - 1 + entity.diameter / 2) // TILE_SIZE)
+            row = int((entity.y - 1 + entity.diameter / 2) // TILE_SIZE)
+            self.entities[row][col].append(entity)
+        for cb in self.all_collision_boxs:
+            if cb.id not in Particle.particle_group or not \
+                    cb.map_name == self.name:
+                cp.append(cb)
+                continue
+            col = int((cb.x - 1 + cb.diameter / 2) // TILE_SIZE)
+            row = int((cb.y - 1 + cb.diameter / 2) // TILE_SIZE)
+            self.collision_boxs[row][col].append(cb)
+        for item in ep:
+            self.all_entities.remove(item)
+        for item in cp:
+            self.all_collision_boxs.remove(item)
 
     def update_surroundings(self, particle: Particle) -> None:
         """ Feed the map info to the selected particle """
@@ -200,6 +222,7 @@ class Camera(Positional):
                 if tile.get_stat('brightness') > 0:
                     items.append(tile)
                     items += current_map.entities[j][i]
+                    items += current_map.collision_boxs[j][i]
                 else:
                     tiles = tile.get_adjacent_tiles()
                     for t in tiles:
@@ -207,7 +230,11 @@ class Camera(Positional):
                             for entity in current_map.entities[j][i]:
                                 if entity.detect_collision(t):
                                     items.append(entity)
+                                for cb in current_map.collision_boxs[j][i]:
+                                    if cb.detect_collision(t):
+                                        items.append(cb)
                             break
+
                 for item in items:
                     display_x = round(item.x - self.x)
                     display_y = round(item.y - self.y)
@@ -222,7 +249,7 @@ class Camera(Positional):
             item.display(screen, displaying[item.id])
 
         # display brightness
-        font = pygame.font.Font(None, 25)
+        # font = pygame.font.Font(None, 25)
         for i in range(start_row, end_row):
             for j in range(start_col, end_col):
                 tile = current_map.blocks[j][i]
@@ -241,9 +268,10 @@ class Camera(Positional):
                     display_x = round(tile.x - self.x)
                     display_y = round(tile.y - self.y)
                     screen.blit(dark, (display_x, display_y))
-                    num = font.render(str(tile.get_stat('brightness')), True,
-                                      (255, 255, 0))
-                    screen.blit(num, (display_x + tile.diameter // 3, display_y + tile.diameter // 3))
+                    # num = font.render(str(tile.get_stat('brightness')), True,
+                    #                  (255, 255, 0))
+                    # screen.blit(num, (display_x + tile.diameter // 3,
+                    # display_y + tile.diameter // 3))
 
 
 class Level:
@@ -331,22 +359,38 @@ class Level:
                     event.type == pygame.MOUSEBUTTONDOWN:
                 player_input.append(event)
 
+        # particle status update
+        for particle in Particle.particle_group.copy():
+            particle = Particle.particle_group[particle]
+            if isinstance(particle, Living):
+                if particle.is_dead():
+                    particle.die()
+                    continue
+            if isinstance(particle, Item) or isinstance(particle, Creature):
+                if particle not in \
+                        self._game_maps[particle.map_name].all_entities:
+                    self._game_maps[particle.map_name].all_entities.append(
+                        particle)
+            if isinstance(particle, CollisionBox):
+                if particle not in \
+                        self._game_maps[particle.map_name].all_collision_boxs:
+                    self._game_maps[
+                        particle.map_name].all_collision_boxs.append(particle)
+            if isinstance(particle, Attackable) or isinstance(particle,
+                                                              CollisionBox):
+                particle.count()
+                if isinstance(particle, CollisionBox):
+                    particle.sync()
+
         # update entity surroundings
         for game_map in self._game_maps:
-            self._game_maps[game_map].update_entities()
+            self._game_maps[game_map].update_contents()
         for particle in Particle.particle_group:
             particle = Particle.particle_group[particle]
             self._game_maps[particle.map_name].update_surroundings(particle)
         # creature actions
         for creature in Creature.creature_group:
             Creature.creature_group[creature].action(player_input)
-
-        # particle status update
-        for particle in Particle.particle_group.copy():
-            particle = Particle.particle_group[particle]
-            if isinstance(particle, Living):
-                if particle.is_dead():
-                    pass
 
         # lighting
         for creature in Creature.creature_group:
@@ -488,7 +532,6 @@ def _square_square(c1: Collidable, c2: Collidable) -> None:
     corners = [corner_upleft, corner_upright, corner_bottomleft,
                corner_bottomright]
     collided = []
-    print("Call:.......................................")
     for corner in corners:
         if c2.x <= corner[0] <= c2.x + c2.diameter and c2.y <= corner[
             1] <= c2.y + c2.diameter:

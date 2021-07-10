@@ -260,7 +260,6 @@ class Collidable(Positional, DynamicStats):
         r2 = other.diameter / 2
         cx2 = other.x + r2 - 1
         cy2 = other.y + r2 - 1
-
         return math.sqrt(pow(cx1 - cx2, 2) + pow(cy1 - cy2, 2)) < (r1 + r2)
 
     def _circle_square(self, other: Collidable) -> bool:

@@ -75,6 +75,32 @@ class Particle(Positional):
         self._surrounding_tiles = tiles
         self._surrounding_entities = entities
 
+    def get_adjacent_entities(self, diagonal=False) -> List[Particle]:
+        if isinstance(self, Collidable):
+            center_x = int((self.x - 1 + self.diameter / 2) // TILE_SIZE)
+            center_y = int((self.y - 1 + self.diameter / 2) // TILE_SIZE)
+        else:
+            center_x = int((self.x // TILE_SIZE))
+            center_y = int((self.y // TILE_SIZE))
+
+        left = (center_x - 1, center_y)
+        top = (center_x, center_y - 1)
+        right = (center_x + 1, center_y)
+        down = (center_x, center_y + 1)
+        returning = [left, top, right, down, (center_x, center_y)]
+        if diagonal:
+            top_left = (center_x - 1, center_y - 1)
+            top_right = (center_x + 1, center_y - 1)
+            bottom_right = (center_x + 1, center_y + 1)
+            bottom_left = (center_x - 1, center_y + 1)
+            returning += [top_right, top_left, bottom_right, bottom_left]
+        lst = []
+        for item in returning:
+            if item[1] in self._surrounding_entities:
+                if item[0] in self._surrounding_entities[item[1]]:
+                    lst += self._surrounding_entities[item[1]][item[0]]
+        return lst
+
     def get_adjacent_tiles(self, diagonal=False) -> List[Particle]:
         if isinstance(self, Collidable):
             center_x = int((self.x - 1 + self.diameter / 2) // TILE_SIZE)
@@ -112,14 +138,12 @@ class Item(Collidable, Particle):
     pass
 
 
-class Attack(Particle, Collidable, Attackable):
-    """ A stationary area that deals damage to living objects colliding with it
+class CollisionBox(Particle, Collidable):
+    """ A stationary particle used to collision detection
 
     === Public Attributes ===
     _ self_destroy: Ticks before self-destruction
-    - target: A bool expression that evaluates based on passed in particle info
-        to determine whether it should be the target of the orb.
-    - owner: The particle that launched this attack
+    - owner: The particle that created this collision box
 
     === Private Attributes ===
     - _self_destroy_counter: self-destruction counter
@@ -128,22 +152,21 @@ class Attack(Particle, Collidable, Attackable):
     self_destroy: int
     _self_destroy_counter: int
     owner: Particle
-    attacks = {}
+    collsion_box_group = {}
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
         if "display_priority" not in info:
             info['display_priority'] = 1
-
         Particle.__init__(self, info)
         Collidable.__init__(self, info)
-        Attackable.__init__(self, info)
-        Attack.attacks[self.id] = self
-        attr = ["self_destroy", "_self_destroy_counter", 'target', 'owner']
+        CollisionBox.collsion_box_group[self.id] = self
+        attr = ["self_destroy", "_self_destroy_counter", 'owner']
         default = {
             'self_destroy': int(FPS // 2),
             '_self_destroy_counter': 0,
-            'target': []
         }
+        self.texture = pygame.transform.scale(self.texture,
+                                              (self.diameter, self.diameter))
         for key in default:
             if key not in info:
                 info[key] = default[key]
@@ -152,45 +175,34 @@ class Attack(Particle, Collidable, Attackable):
                 setattr(self, item, info[item])
             else:
                 raise InvalidConstructionInfo
-        self._attack_counter = self.attack_speed
-
-    def attack(self, targets: Optional[List[Living]]) -> None:
-        """ Perform an attack and reset the attack counter
-        """
-        if not self.can_attack():
-            raise AttackOnCoolDownError
-        for target in targets:
-            assert isinstance(target, Collidable)
-            if self.is_target(target) and self.detect_collision(target):
-                target.health -= self.attack_power
-        self._attack_counter += 1
-
-    def can_attack(self) -> bool:
-        return self._attack_counter == self.attack_speed
 
     def count(self) -> None:
-        # override
-        if self._attack_counter < self.attack_speed:
-            self._attack_counter += 1
         self._self_destroy_counter += 1
         if self._self_destroy_counter >= self.self_destroy:
             self.remove()
 
     def sync(self):
         self.map_name = self.owner.map_name
-        self.x = self.owner.x
-        self.y = self.owner.y
+        c1x = self.owner.x - 1 + self.owner.get_stat('diameter') / 2
+        c1y = self.owner.y - 1 + self.owner.get_stat('diameter') / 2
+        c2x = c1x - self.owner.get_stat('attack_range')
+        c2y = c1y - self.owner.get_stat('attack_range')
+        if isinstance(self.owner, Collidable):
+            self.x = self.owner.x - 1 + self.owner.get_stat('diameter') / 2 - \
+                     self.owner.get_stat('attack_range')
+            self.y = self.owner.y - 1 + self.owner.get_stat('diameter') / 2 - \
+                     self.owner.get_stat('attack_range')
+        else:
+            self.x = self.owner.x - self.owner.get_stat('attack_range')
+            self.y = self.owner.y - self.owner.get_stat('attack_range')
 
-    def is_target(self, target: Any):
-        return self.target.eval(vars(target))
+    def remove(self):
+        Particle.remove(self)
+        CollisionBox.collsion_box_group.pop(self.id, None)
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
         screen.blit(self.texture, location)
-
-    def remove(self):
-        Particle.remove(self)
-        Attack.attacks.pop(self.id, None)
 
 
 class Creature(Particle, Collidable, Movable, Living, Directional, Lightable):
@@ -285,13 +297,7 @@ class Creature(Particle, Collidable, Movable, Living, Directional, Lightable):
             row = self._surrounding_tiles[row]
             for p in row:
                 particles.append(row[p])
-        for row in self._surrounding_entities:
-            row = self._surrounding_entities[row]
-            for col in row:
-                col = row[col]
-                for item in col:
-                    if isinstance(item, Collidable) and item.solid:
-                        particles.append(item)
+        particles += self.get_adjacent_entities(True)
 
         if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
             return
@@ -391,14 +397,13 @@ class Player(Creature, Attackable):
         self.mouse_buttons = (0, 0, 0)
 
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
+        self.mouse_buttons = pygame.mouse.get_pressed()
         for event in player_input:
             if event.type == pygame.KEYDOWN:
                 if event.key not in self.pressed_keys:
                     self.pressed_keys.append(event.key)
             elif event.type == pygame.KEYUP:
                 self.pressed_keys.remove(event.key)
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                self.mouse_buttons = pygame.mouse.get_pressed(3)
         effective_directions = []
         for key in self.pressed_keys:
             if key == pygame.K_w or key == pygame.K_a:
@@ -435,32 +440,32 @@ class Player(Creature, Attackable):
         # light
 
         # attack
-        if self.can_attack():
-            if self.mouse_buttons[0] == 1:
-                self.attack(None)
+        if self.mouse_buttons[0] == 1:
+            self.attack(None)
         self.update_position()
 
-    def attack(self, targets: Optional[List[Living]]) -> None:
+    def attack(self, target=None) -> None:
         """ Perform an attack and reset the attack counter """
-        c1x = self.x - 1 + self.diameter / 2
-        c1y = self.y - 1 + self.diameter / 2
-        c2x = c1x - self.get_stat('attack_range')
-        c2y = c1y - self.get_stat('attack_range')
-        target = construct_from_str("( not id = " + str(self.id) + " )")
-        info = {
-            'diameter': self.get_stat('attack_range') * 2,
-            'shape': self.shape,
-            'attack_power': self.get_stat('attack_power'),
-            'texture': 'attack_circle.png',
-            'x': c2x,
-            'y': c2y,
-            'map_name': self.map_name,
-            'owner': self,
-            'target': target,
-            'solid': False
-        }
-        Attack(info)
-        self._attack_counter = 0
+        if self.can_attack():
+            c1x = self.x - 1 + self.get_stat('diameter') / 2
+            c1y = self.y - 1 + self.get_stat('diameter') / 2
+            c2x = c1x - self.get_stat('attack_range')
+            c2y = c1y - self.get_stat('attack_range')
+            info = {
+                'diameter': self.get_stat('attack_range') * 2 + 1,
+                'shape': self.shape,
+                'texture': 'attack_circle.png',
+                'owner': self,
+                'x': c2x,
+                'y': c2y,
+                'map_name': self.map_name
+            }
+            collision_box = CollisionBox(info)
+            for entity in self.get_adjacent_entities():
+                if not entity.id == self.id and isinstance(entity, Living):
+                    if collision_box.detect_collision(entity):
+                        entity.health -= self.get_stat('attack_power')
+            self._attack_counter = 0
 
     def remove(self):
         Creature.remove(self)
@@ -477,8 +482,8 @@ class Block(Particle, Collidable, Lightable):
         Particle.__init__(self, info)
         Collidable.__init__(self, info)
         Lightable.__init__(self, info)
-        self.texture = pygame.transform.scale(self.texture, (TILE_SIZE,
-                                                             TILE_SIZE))
+        self.texture = pygame.transform.scale(self.texture,
+                                              (TILE_SIZE, TILE_SIZE)).convert()
         Block.block_group[self.id] = self
 
     def remove(self):
@@ -489,7 +494,6 @@ class Block(Particle, Collidable, Lightable):
         self.enlighten(self)
         if self.get_stat('brightness') > 0:
             blocks = self.get_adjacent_tiles()
-            # print(len(blocks))
             for block in blocks:
                 assert isinstance(block, Block)
                 if block.get_stat('brightness') < self.get_stat('brightness'):
