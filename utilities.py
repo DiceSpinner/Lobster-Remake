@@ -177,7 +177,6 @@ class Collidable(Positional, DynamicStats):
     def __init__(self, info: dict[str, Union[int, str]]) -> None:
         Positional.__init__(self, info)
         attr = ['diameter', 'shape', 'solid']
-        dynamic_stats = ['diameter', 'shape', 'solid']
         default = {
             'diameter': 30,
             'shape': 'square',

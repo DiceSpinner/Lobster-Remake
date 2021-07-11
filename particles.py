@@ -183,10 +183,6 @@ class CollisionBox(Particle, Collidable):
 
     def sync(self):
         self.map_name = self.owner.map_name
-        c1x = self.owner.x - 1 + self.owner.get_stat('diameter') / 2
-        c1y = self.owner.y - 1 + self.owner.get_stat('diameter') / 2
-        c2x = c1x - self.owner.get_stat('attack_range')
-        c2y = c1y - self.owner.get_stat('attack_range')
         if isinstance(self.owner, Collidable):
             self.x = self.owner.x - 1 + self.owner.get_stat('diameter') / 2 - \
                      self.owner.get_stat('attack_range')
@@ -298,6 +294,8 @@ class Creature(Particle, Collidable, Movable, Living, Directional, Lightable):
             for p in row:
                 particles.append(row[p])
         particles += self.get_adjacent_entities(True)
+        if self in particles:
+            particles.remove(self)
 
         if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
             return
@@ -317,9 +315,10 @@ class Creature(Particle, Collidable, Movable, Living, Directional, Lightable):
                 'vx')), 0))
         else:
             x_time, y_time = 1, 1
+
         while x_d > 0 or y_d > 0:
-            if x_d > 0:
-                for i in range(x_time):
+            for i in range(x_time):
+                if x_d > 0:
                     if x_d >= 1:
                         value = self.get_stat('vx') / abs(self.get_stat('vx'))
                         x_d -= 1
@@ -330,14 +329,14 @@ class Creature(Particle, Collidable, Movable, Living, Directional, Lightable):
                     n_x = int(self.x)
                     if abs(n_x - c_x) >= 1:
                         for particle in particles:
-                            if particle.solid and self.detect_collision(
+                            if particle.solid and self.solid and self.detect_collision(
                                     particle):
                                 self.x -= value
                                 x_d = 0
                                 break
 
-            if y_d > 0:
-                for i in range(y_time):
+            for i in range(y_time):
+                if y_d > 0:
                     if y_d >= 1:
                         value = self.get_stat('vy') / abs(self.get_stat('vy'))
                         y_d -= 1
@@ -348,7 +347,7 @@ class Creature(Particle, Collidable, Movable, Living, Directional, Lightable):
                     n_y = int(self.y)
                     if abs(n_y - c_y) >= 1:
                         for particle in particles:
-                            if particle.solid and self.detect_collision(
+                            if particle.solid and self.solid and self.detect_collision(
                                     particle):
                                 self.y -= value
                                 y_d = 0
@@ -501,7 +500,7 @@ class Block(Particle, Collidable, Lightable):
                     block.light()
 
 
-class NPC(Creature):
+class NPC(Creature, Attackable):
     """ Description: Non-Player Character class
 
     Additional Attributes:
@@ -512,10 +511,35 @@ class NPC(Creature):
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         Creature.__init__(self, info)
+        Attackable.__init__(self, info)
         NPC.npc_group[self.id] = self
 
     def query_info(self):
         pass
 
+    def attack(self, target=None):
+        if self.can_attack():
+            c1x = self.x - 1 + self.get_stat('diameter') / 2
+            c1y = self.y - 1 + self.get_stat('diameter') / 2
+            c2x = c1x - self.get_stat('attack_range')
+            c2y = c1y - self.get_stat('attack_range')
+            info = {
+                'diameter': self.get_stat('attack_range') * 2 + 1,
+                'shape': self.shape,
+                'texture': 'attack_circle.png',
+                'owner': self,
+                'x': c2x,
+                'y': c2y,
+                'map_name': self.map_name
+            }
+            collision_box = CollisionBox(info)
+            for entity in self.get_adjacent_entities():
+                if not entity.id == self.id and isinstance(entity, Living):
+                    if collision_box.detect_collision(entity):
+                        entity.health -= self.get_stat('attack_power')
+            self._attack_counter = 0
+
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
-        pass
+        self.attack()
+        self.move(100)
+        self.update_position()
