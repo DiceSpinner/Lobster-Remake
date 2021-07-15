@@ -2,7 +2,11 @@ SCREEN_SIZE = (1200, 900)
 ICON = 'Lobster.png'
 CAPTION = 'Lobster-Remake'
 FPS = 60
-TILE_SIZE = 64
+TILE_SIZE = 96
+IMAGE_PATH = "assets/images"
+MAP_PATH = "assets/maps"
+MUSIC_PATH = "assets/music"
+SOUND_PATH = "assets/sounds"
 
 SQUARE = 'square'
 CIRCLE = 'circle'

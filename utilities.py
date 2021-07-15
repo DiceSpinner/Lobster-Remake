@@ -34,17 +34,14 @@ class DynamicStats:
                     self._buffer_stats[data] += info[data]
 
     def get_stat(self, item: str) -> Any:
-        if not hasattr(self, item):
-            raise AttributeError
-        col = vars(self)
         if item in self._buffer_stats:
-            if not isinstance(col[item], int) and not isinstance(
-                    col[item], float):
+            if not isinstance(getattr(self, item), int) and not isinstance(
+                    getattr(self, item), float):
                 return self._buffer_stats[item]
             else:
-                return col[item] + self._buffer_stats[item]
+                return getattr(self, item) + self._buffer_stats[item]
         else:
-            return col[item]
+            return getattr(self, item)
 
     def reset(self):
         self._buffer_stats = {}
@@ -63,6 +60,8 @@ class Positional:
     y: float
 
     def __init__(self, info: dict[str, Union[str, int]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
         attr = ['x', 'y', 'map_name']
         for item in attr:
             if item not in info:
@@ -90,6 +89,8 @@ class Movable(Positional, DynamicStats):
     speed: float
 
     def __init__(self, info: dict[str, Union[str, float]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
         Positional.__init__(self, info)
         attr = ['vx', 'vy', 'ax', 'ay', 'speed']
         default = {
@@ -121,8 +122,10 @@ class Movable(Positional, DynamicStats):
             direction = get_direction((self.x, self.y), (direction.x,
                                                          direction.y))
         direction = math.radians(direction)
-        self.add_stats({'vx': self.get_stat('speed') * round(math.cos(direction), 2)})
-        self.add_stats({'vy': - self.get_stat('speed') * round(math.sin(direction), 2)})
+        self.add_stats(
+            {'vx': self.get_stat('speed') * round(math.cos(direction), 2)})
+        self.add_stats(
+            {'vy': - self.get_stat('speed') * round(math.sin(direction), 2)})
 
 
 class Directional(Positional):
@@ -140,6 +143,8 @@ class Directional(Positional):
     direction: float
 
     def __init__(self, info: dict[str, Union[str, float]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
         Positional.__init__(self, info)
         attr = ['direction']
         default = {
@@ -175,6 +180,8 @@ class Collidable(Positional, DynamicStats):
     solid: bool
 
     def __init__(self, info: dict[str, Union[int, str]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
         Positional.__init__(self, info)
         attr = ['diameter', 'shape', 'solid']
         default = {
@@ -283,6 +290,8 @@ class Lightable(DynamicStats):
     light_resistance: int
 
     def __init__(self, info: dict[str, Union[int, str]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
         attr = ['brightness', 'light_source', 'light_resistance']
         default = {
             'brightness': 0,
@@ -300,14 +309,14 @@ class Lightable(DynamicStats):
         """ Raise self and other lightable object's brightness """
         if self.get_stat('brightness') < self.get_stat('light_source'):
             self.add_stats({'brightness': self.get_stat('light_source') -
-                            self.get_stat('brightness')})
+                                          self.get_stat('brightness')})
         light_level = self.get_stat('brightness') - \
-            self.get_stat('light_resistance')
+                      self.get_stat('light_resistance')
         if light_level < 0:
             return
         if light_level > other.get_stat('brightness'):
             other.add_stats({'brightness': light_level -
-                            other.get_stat('brightness')})
+                                           other.get_stat('brightness')})
 
 
 class Living(DynamicStats):
@@ -323,6 +332,8 @@ class Living(DynamicStats):
     death: BoolExpr
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
         attr = ['health', 'max_health', 'death']
         default = {
             'health': DEFAULT_HEALTH,
@@ -362,6 +373,8 @@ class Attackable(DynamicStats):
     _attack_counter: int
 
     def __init__(self, info: dict[str, Union[int, float]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
         self._attack_counter = 0
         attr = ['attack_power', 'attack_speed', 'attack_range']
         default = {
@@ -419,14 +432,26 @@ def get_direction(obj1: Tuple[float, float], obj2: Tuple[float, float]) \
             value = 180 + arctan
         else:
             value = arctan
-    else:
+    elif tan < 0:
         if obj1[1] < obj2[1]:
             value = arctan
         else:
             value = arctan + 180
+    else:
+        value = 0
     if value >= 360:
         value = value % 360
     elif value < 0:
         while value < 0:
             value += 360
-    return round(value, 2)
+    return round(value, 1)
+
+
+def called(name: str, info: dict[Any]) -> bool:
+    if "called" in info:
+        if isinstance(info['called'], List):
+            if name in info['called']:
+                return True
+        info['called'] = [name]
+        return False
+    return False

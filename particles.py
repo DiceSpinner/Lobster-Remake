@@ -1,25 +1,19 @@
 from __future__ import annotations
 import pygame
-from typing import List, Any, Tuple, Union, Optional, Generic, TypeVar
+from typing import List, Tuple, Union, Optional, Any
 from utilities import Positional, Movable, Collidable, Lightable, Living, \
-    Directional, Attackable, get_direction
-from settings import TILE_SIZE, SQUARE, CIRCLE, SHAPES
+    Directional, Attackable, get_direction, DynamicStats, called
 from bool_expr import BoolExpr, construct_from_str
-import os
 from settings import *
-from error import AttackOnCoolDownError, InvalidConstructionInfo
-import math
+from error import InvalidConstructionInfo
 
 
-class Particle(Positional):
+class Particle(Positional, DynamicStats):
     """
     Description: Customized sprites
 
     === Public Attributes ===
     - id: Identifier of the particle.
-    - pos: A dictionary that stores the position of this particle in the map,
-        the key is the name of the map and the values are x-y coordinates.
-
     - display_priority: The display priority of this particle, particles with
         the highest priority will be displayed on top of the screen
 
@@ -28,18 +22,26 @@ class Particle(Positional):
     === Private Attributes ===
     -
     """
+    # static fields
     ID = 0
     particle_group = {}
     light_particles = {}
+    textures = {}
+    rotation = {}
+    sounds = {}
+
     id: int
     display_priority: int
-    texture: pygame.Surface
+    texture: str
+    _texture: pygame.Surface
     name: str
     detection_radius: int
     _surrounding_tiles: dict[int, dict[int, Particle]]
     _surrounding_entities: dict[int, dict[int, List[Particle]]]
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
         default = {
             'display_priority': DEFAULT_DISPLAY_PRIORITY,
             'texture': DEFAULT_PARTICLE_TEXTURE,
@@ -48,6 +50,7 @@ class Particle(Positional):
         }
         attr = ['display_priority', 'texture', 'name', 'detection_radius']
         Positional.__init__(self, info)
+        DynamicStats.__init__(self)
         self.id = Particle.ID
         Particle.ID += 1
         for key in default:
@@ -56,15 +59,14 @@ class Particle(Positional):
         for item in info:
             if item in attr:
                 setattr(self, item, info[item])
-        self.texture = pygame.image.load(
-            os.path.join("assets/images", self.texture))
+        self._texture = Particle.textures[self.texture]
         self._surrounding_tiles = []
         self._surrounding_entities = []
         Particle.particle_group[self.id] = self
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
-        screen.blit(self.texture, location)
+        screen.blit(self._texture, location)
 
     def remove(self):
         """ Remove this particle from the game """
@@ -138,7 +140,17 @@ class Item(Collidable, Particle):
     pass
 
 
-class CollisionBox(Particle, Collidable):
+class CollidableParticle(Particle, Collidable):
+    def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
+        Particle.__init__(self, info)
+        Collidable.__init__(self, info)
+        self._texture = pygame.transform.scale(self._texture,
+                                               (self.diameter, self.diameter))
+
+
+class CollisionBox(CollidableParticle):
     """ A stationary particle used to collision detection
 
     === Public Attributes ===
@@ -155,18 +167,17 @@ class CollisionBox(Particle, Collidable):
     collsion_box_group = {}
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
         if "display_priority" not in info:
             info['display_priority'] = 1
-        Particle.__init__(self, info)
-        Collidable.__init__(self, info)
+        CollidableParticle.__init__(self, info)
         CollisionBox.collsion_box_group[self.id] = self
         attr = ["self_destroy", "_self_destroy_counter", 'owner']
         default = {
             'self_destroy': int(FPS // 2),
             '_self_destroy_counter': 0,
         }
-        self.texture = pygame.transform.scale(self.texture,
-                                              (self.diameter, self.diameter))
         for key in default:
             if key not in info:
                 info[key] = default[key]
@@ -182,6 +193,9 @@ class CollisionBox(Particle, Collidable):
             self.remove()
 
     def sync(self):
+        if isinstance(self.owner, Living):
+            if self.owner.is_dead():
+                self.remove()
         self.map_name = self.owner.map_name
         if isinstance(self.owner, Collidable):
             self.x = self.owner.x - 1 + self.owner.get_stat('diameter') / 2 - \
@@ -198,10 +212,39 @@ class CollisionBox(Particle, Collidable):
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
-        screen.blit(self.texture, location)
+        screen.blit(self._texture, location)
 
 
-class Creature(Particle, Collidable, Movable, Living, Directional, Lightable):
+class DirectionalParticle(CollidableParticle, Directional):
+    """
+    """
+
+    def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
+        CollidableParticle.__init__(self, info)
+        Directional.__init__(self, info)
+        if self.texture not in Particle.rotation:
+            Particle.rotation[self.texture] = {self.diameter: {}}
+        else:
+            Particle.rotation[self.texture][self.diameter] = {}
+
+    def display(self, screen: pygame.Surface,
+                location: Tuple[int, int]) -> None:
+        radius = self.diameter / 2
+        if self.direction not in Particle.rotation[self.texture][self.diameter]:
+            Particle.rotation[self.texture][self.diameter][self.direction] = \
+                pygame.transform.rotate(self._texture, self.direction)
+        texture = Particle.rotation[self.texture][self.diameter][self.direction]
+        centre_x = location[0] + radius - 1
+        centre_y = location[1] + radius - 1
+        size = texture.get_size()
+        cx = centre_x - size[0] / 2 + radius
+        cy = centre_y - size[1] / 2
+        screen.blit(texture, [cx - radius, cy])
+
+
+class Creature(DirectionalParticle, Movable, Living, Lightable):
     """
     Description: Movable entities
 
@@ -221,15 +264,16 @@ class Creature(Particle, Collidable, Movable, Living, Directional, Lightable):
         if "display_priority" not in info:
             info['display_priority'] = 2
 
-        Particle.__init__(self, info)
-        Collidable.__init__(self, info)
+        if called(self.__class__.__name__, info):
+            return
+        DirectionalParticle.__init__(self, info)
+        self._texture = pygame.transform.scale(
+            Particle.textures[self.texture], (self.diameter * 2,
+                                              self.diameter * 2))
         Movable.__init__(self, info)
         Lightable.__init__(self, info)
-        Directional.__init__(self, info)
         Living.__init__(self, info)
         Creature.creature_group[self.id] = self
-        self.texture = pygame.transform.scale(self.texture, (self.diameter * 2,
-                                                             self.diameter * 2))
         attr = ["active", 'color', 'light_on']
         default = {
             'active': True,
@@ -245,21 +289,8 @@ class Creature(Particle, Collidable, Movable, Living, Directional, Lightable):
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
+        DirectionalParticle.display(self, screen, location)
         radius = self.diameter / 2
-        texture = pygame.transform.rotate(self.texture, self.direction)
-        centre_x = location[0] + radius - 1
-        centre_y = location[1] + radius - 1
-        size = texture.get_size()
-        cx = centre_x - size[0] / 2 + radius
-        cy = centre_y - size[1] / 2
-        # texture = self.texture
-        screen.blit(texture, [cx - radius, cy])
-        # dark = pygame.Surface((self.diameter,
-        #                       self.diameter))
-        # dark.fill((0, 0, 0))
-        # dark.set_alpha(100)
-        # screen.blit(dark, [location[0], location[1]])
-
         if self.shape == CIRCLE:
             pygame.draw.circle(
                 screen, self.color, (location[0] + self.diameter // 2, location[
@@ -366,7 +397,7 @@ class Creature(Particle, Collidable, Movable, Living, Directional, Lightable):
 
     def remove(self):
         Particle.remove(self)
-        Creature.creature_group.pop(self, None)
+        Creature.creature_group.pop(self.id, None)
 
     def get_tile_in_contact(self) -> Particle:
         col = int((self.x - 1 + self.diameter / 2) // TILE_SIZE)
@@ -389,6 +420,8 @@ class Player(Creature, Attackable):
     mouse_buttons: Tuple[int, int, int]
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
         Creature.__init__(self, info)
         Attackable.__init__(self, info)
         Player.player_group[self.id] = self
@@ -396,7 +429,7 @@ class Player(Creature, Attackable):
         self.mouse_buttons = (0, 0, 0)
 
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
-        self.mouse_buttons = pygame.mouse.get_pressed()
+        self.mouse_buttons = pygame.mouse.get_pressed(3)
         for event in player_input:
             if event.type == pygame.KEYDOWN:
                 if event.key not in self.pressed_keys:
@@ -453,14 +486,14 @@ class Player(Creature, Attackable):
             info = {
                 'diameter': self.get_stat('attack_range') * 2 + 1,
                 'shape': self.shape,
-                'texture': 'attack_circle.png',
+                'texture': 'attack_circle_64.png',
                 'owner': self,
                 'x': c2x,
                 'y': c2y,
                 'map_name': self.map_name
             }
             collision_box = CollisionBox(info)
-            for entity in self.get_adjacent_entities():
+            for entity in self.get_adjacent_entities(True):
                 if not entity.id == self.id and isinstance(entity, Living):
                     if collision_box.detect_collision(entity):
                         entity.health -= self.get_stat('attack_power')
@@ -468,21 +501,20 @@ class Player(Creature, Attackable):
 
     def remove(self):
         Creature.remove(self)
-        Player.player_group.pop(self, None)
+        Player.player_group.pop(self.id, None)
 
 
-class Block(Particle, Collidable, Lightable):
+class Block(CollidableParticle, Lightable):
     """
 
     """
     block_group = {}
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
-        Particle.__init__(self, info)
-        Collidable.__init__(self, info)
+        if called(self.__class__.__name__, info):
+            return
+        CollidableParticle.__init__(self, info)
         Lightable.__init__(self, info)
-        self.texture = pygame.transform.scale(self.texture,
-                                              (TILE_SIZE, TILE_SIZE)).convert()
         Block.block_group[self.id] = self
 
     def remove(self):
@@ -510,6 +542,8 @@ class NPC(Creature, Attackable):
     npc_group = {}
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
         Creature.__init__(self, info)
         Attackable.__init__(self, info)
         NPC.npc_group[self.id] = self
@@ -526,20 +560,24 @@ class NPC(Creature, Attackable):
             info = {
                 'diameter': self.get_stat('attack_range') * 2 + 1,
                 'shape': self.shape,
-                'texture': 'attack_circle.png',
+                'texture': 'attack_circle_64.png',
                 'owner': self,
                 'x': c2x,
                 'y': c2y,
                 'map_name': self.map_name
             }
             collision_box = CollisionBox(info)
-            for entity in self.get_adjacent_entities():
+            for entity in self.get_adjacent_entities(True):
                 if not entity.id == self.id and isinstance(entity, Living):
                     if collision_box.detect_collision(entity):
                         entity.health -= self.get_stat('attack_power')
             self._attack_counter = 0
 
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
-        self.attack()
-        self.move(100)
+        if self.can_attack():
+            self.attack()
         self.update_position()
+
+    def remove(self):
+        Creature.remove(self)
+        NPC.npc_group.pop(self.id, None)

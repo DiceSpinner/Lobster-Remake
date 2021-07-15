@@ -17,7 +17,6 @@ import os
 class GameMap:
     """
     Description: Game map object
-
     === Public Attributes ===
     name: name of the map
     tile_size: the size of each tile in pixels
@@ -101,6 +100,7 @@ class GameMap:
             col = int((entity.x - 1 + entity.diameter / 2) // TILE_SIZE)
             row = int((entity.y - 1 + entity.diameter / 2) // TILE_SIZE)
             self.entities[row][col].append(entity)
+
         for cb in self.all_collision_boxs:
             if cb.id not in Particle.particle_group or not \
                     cb.map_name == self.name:
@@ -150,7 +150,6 @@ class GameMap:
 class Camera(Positional):
     """
     Camera used to display player/particle movements
-
     === Public Attributes ===
     - game_maps: game maps this camera operates on
     - length: length of the camera in pixels
@@ -277,12 +276,10 @@ class Camera(Positional):
 class Level:
     """
     Description: Levels of the game
-
     === Public Attributes ===
     difficulty: difficulty of the level
     goal: The goal of the level
     running: Whether this level is running
-
     === Private Attributes ===
     _asset: Loaded assets of the game
     _asset_name: The locations of game assets
@@ -290,7 +287,6 @@ class Level:
     _map_names: Name of the maps
     _camera: Camera for this level
     _initialized: Whether the level has been initialized
-
     === Representation Invariants ===
     - difficulty must be an integer from 0 - 3
     """
@@ -343,6 +339,7 @@ class Level:
         Run the level with the given setting
         """
         if not self._initialized:
+            _load_assets()
             self._load_maps()
             self._load_texts()
             self._initialized = True
@@ -452,7 +449,6 @@ class Game:
     """
     Description:
         A game object representing the game the player is playing
-
     === Private Attributes ===
         _screen: Screen of the game that gets displayed to the player
         _levels: Levels of this game
@@ -510,6 +506,7 @@ class Game:
         cursor_image = pygame.transform.scale(cursor_image, (24, 24))
         while running:
             clock.tick(self.frame_rate)
+            # print(clock.get_fps())
             self._screen.fill((0, 0, 0))
             if self._level_selecting:
                 self._selected_level = 0
@@ -528,3 +525,18 @@ class Game:
 def compare_by_display_priority(p1: Particle, p2: Particle) -> bool:
     """ Sort by non-decreasing order """
     return p2.display_priority > p1.display_priority
+
+
+def _load_assets():
+    """ Load in game assets """
+    path = "assets/images"
+    paths = os.listdir(path)
+    for p in paths:
+        Particle.textures[p] = pygame.image.load(
+            os.path.join(path, p)).convert_alpha()
+        Particle.rotation[p] = {}
+    path = "assets/sounds"
+    paths = os.listdir(path)
+    for p in paths:
+        Particle.sounds[p] = pygame.mixer.Sound(os.path.join(path, p))
+
