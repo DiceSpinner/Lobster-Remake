@@ -141,6 +141,8 @@ class Item(Collidable, Particle):
 
 
 class CollidableParticle(Particle, Collidable):
+    """ Particles that implements the collidable interface """
+
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
         if called(self.__class__.__name__, info):
             return
@@ -148,6 +150,11 @@ class CollidableParticle(Particle, Collidable):
         Collidable.__init__(self, info)
         self._texture = pygame.transform.scale(self._texture,
                                                (self.diameter, self.diameter))
+
+    def get_tile_in_contact(self) -> Particle:
+        col = int((self.x - 1 + self.diameter / 2) // TILE_SIZE)
+        row = int((self.y - 1 + self.diameter / 2) // TILE_SIZE)
+        return self._surrounding_tiles[row][col]
 
 
 class CollisionBox(CollidableParticle):
@@ -239,21 +246,20 @@ class DirectionalParticle(CollidableParticle, Directional):
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
         radius = self.diameter / 2
-        if self.direction not in Particle.rotation[self.texture][self.diameter]:
-            Particle.rotation[self.texture][self.diameter][self.direction] = \
-                pygame.transform.rotate(self._texture, self.direction)
-        texture = Particle.rotation[self.texture][self.diameter][self.direction]
+        texture = self.get_texture()
         centre_x = location[0] + radius - 1
         centre_y = location[1] + radius - 1
         size = texture.get_size()
-        cx = centre_x - size[0] / 2 + radius
-        cy = centre_y - size[1] / 2
-        screen.blit(texture, [cx - radius, cy])
+        cx = centre_x - round(size[0] / 2, 0) + 1
+        cy = centre_y - round(size[1] / 2, 0) + 1
+        screen.blit(texture, [cx, cy])
 
-    def get_tile_in_contact(self) -> Particle:
-        col = int((self.x - 1 + self.diameter / 2) // TILE_SIZE)
-        row = int((self.y - 1 + self.diameter / 2) // TILE_SIZE)
-        return self._surrounding_tiles[row][col]
+    def get_texture(self):
+        """ Return the texture of current direction """
+        if self.direction not in Particle.rotation[self.texture][self.diameter]:
+            Particle.rotation[self.texture][self.diameter][self.direction] = \
+                pygame.transform.rotate(self._texture, self.direction)
+        return Particle.rotation[self.texture][self.diameter][self.direction]
 
 
 class MovableParticle(DirectionalParticle, Movable):
@@ -354,6 +360,7 @@ class Creature(MovableParticle, Living, Lightable):
     creature_group = {}
     active: bool
     color: Tuple[int, int, int]
+    rotation: dict[int, dict[float, pygame.Surface]]
     light_on: bool
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
@@ -383,18 +390,27 @@ class Creature(MovableParticle, Living, Lightable):
             if item in attr:
                 setattr(self, item, info[item])
 
-    def display(self, screen: pygame.Surface,
-                location: Tuple[int, int]) -> None:
-        DirectionalParticle.display(self, screen, location)
-        radius = self.diameter / 2
-        if self.shape == CIRCLE:
-            pygame.draw.circle(
-                screen, self.color, (location[0] + self.diameter // 2, location[
-                    1] + radius), radius)
-        elif self.shape == SQUARE:
-            pygame.draw.rect(
-                screen, self.color, pygame.Rect(location[0] + radius, location[
-                    1] + radius, radius, radius))
+    def get_texture(self):
+        if self.id in Creature.rotation:
+            if self.direction in Creature.rotation[self.id]:
+                surface = Creature.rotation[self.id][self.direction]
+            else:
+                surface = DirectionalParticle.get_texture(self)
+                self._draw_color_on_texture(surface)
+                Creature.rotation[self.id][self.direction] = surface
+        else:
+            surface = DirectionalParticle.get_texture(self)
+            self._draw_color_on_texture(surface)
+            Creature.rotation[self.id] = {self.direction: surface}
+        return surface
+
+    def _draw_color_on_texture(self, surface: pygame.Surface) -> None:
+        radius = self.diameter // 2
+        size = surface.get_size()
+        cx = round(size[0] / 2, 0)
+        cy = round(size[1] / 2, 0)
+        pygame.draw.circle(
+            surface, self.color, (cx, cy), radius)
 
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
         """ AI of this creature, this method should
@@ -419,15 +435,22 @@ class Creature(MovableParticle, Living, Lightable):
 
 
 class SweepAttackable(Creature, Attackable):
+    """ Creatures with a melee AOE sweep attack implementation of the attackable
+    method, must be inherited by other sub-creature classes in order to utilize
+    the methods.
 
+    """
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         if called(self.__class__.__name__, info):
             return
         Creature.__init__(self, info)
         Attackable.__init__(self, info)
 
+    def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
+        raise NotImplementedError
+
     def basic_attack(self, target=None) -> bool:
-        """ Perform an attack and reset the attack counter """
+        """ Damage every nearby creatures within the attack range """
         if self.can_attack():
             c1x = self.x - 1 + self.get_stat('diameter') / 2
             c1y = self.y - 1 + self.get_stat('diameter') / 2

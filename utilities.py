@@ -325,6 +325,7 @@ class Regenable(DynamicStats):
     === Public Attributes ===
     - regen_stats: A collection of stats that can be regenerated
     - stats_max: The maximum value the stats can be regenerated to
+    - max stats in stats_max
     - regen stats in regen_stats
 
     === Representation Invariants ===
@@ -343,6 +344,8 @@ class Regenable(DynamicStats):
         self.regen_stats = []
         self.stats_max = []
         for item in info:
+            # contracted naming  i.e 'max_health' stands for the threshold for
+            # health attribute
             if "max_" in item:
                 self.stats_max.append(item)
             elif '_regen' in item:
@@ -351,7 +354,7 @@ class Regenable(DynamicStats):
                 setattr(self, item, info[item])
 
     def regen(self) -> None:
-        """ Regenerate stats, this method should called every frame """
+        """ Regenerate stats, this method should be called every frame """
         for r in self.regen_stats:
             if hasattr(self, r):
                 value = round(self.get_stat(r + "_regen") / FPS, 2)
@@ -506,7 +509,10 @@ class Attackable(Staminaized):
         return self._attack_counter >= (FPS // self.get_stat('attack_speed'))
 
     def basic_attack(self, targets: Optional[List[Living]]) -> bool:
-        """ Perform an attack and reset the attack counter """
+        """ Perform an attack and reset the attack counter
+
+        Return True if executed successfully
+        """
         raise NotImplementedError
 
 
@@ -544,8 +550,10 @@ def get_direction(obj1: Tuple[float, float], obj2: Tuple[float, float]) \
             value = arctan
         else:
             value = arctan + 180
-    else:
+    elif x_dif > 0:
         value = 0
+    else:
+        value = 180
     if value >= 360:
         value = value % 360
     elif value < 0:
