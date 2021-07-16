@@ -216,8 +216,7 @@ class CollisionBox(CollidableParticle):
 
 
 class DirectionalParticle(CollidableParticle, Directional):
-    """
-    """
+    """ Collidable particles that implements the directional interface """
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
         if called(self.__class__.__name__, info):
@@ -228,6 +227,14 @@ class DirectionalParticle(CollidableParticle, Directional):
             Particle.rotation[self.texture] = {self.diameter: {}}
         else:
             Particle.rotation[self.texture][self.diameter] = {}
+
+    def aim(self, obj: Positional) -> None:
+        cx = self.x + self.diameter / 2 - 1
+        cy = self.y + self.diameter / 2 - 1
+        obj = (obj.x, obj.y)
+        if isinstance(obj, Collidable):
+            obj = (obj.x + obj.diameter / 2 - 1, obj.y + obj.diameter / 2 - 1)
+        self.direction = get_direction((cx, cy), obj)
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
@@ -243,10 +250,99 @@ class DirectionalParticle(CollidableParticle, Directional):
         cy = centre_y - size[1] / 2
         screen.blit(texture, [cx - radius, cy])
 
+    def get_tile_in_contact(self) -> Particle:
+        col = int((self.x - 1 + self.diameter / 2) // TILE_SIZE)
+        row = int((self.y - 1 + self.diameter / 2) // TILE_SIZE)
+        return self._surrounding_tiles[row][col]
 
-class Creature(DirectionalParticle, Movable, Living, Lightable):
+
+class MovableParticle(DirectionalParticle, Movable):
+    """ Directional particles that implements the movable interface
     """
-    Description: Movable entities
+
+    def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
+        DirectionalParticle.__init__(self, info)
+
+    def update_position(self) -> None:
+        x_d = abs(self.get_stat('vx'))
+        y_d = abs(self.get_stat('vy'))
+        c_x = int(self.x)
+        c_y = int(self.y)
+        particles = []
+        for row in self._surrounding_tiles:
+            row = self._surrounding_tiles[row]
+            for p in row:
+                particles.append(row[p])
+        particles += self.get_adjacent_entities(True)
+        if self in particles:
+            particles.remove(self)
+
+        if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
+            return
+        if self.get_stat('vx') == 0:
+            x_time = 0
+            y_time = 1
+        elif self.get_stat('vy') == 0:
+            x_time = 1
+            y_time = 0
+        elif abs(self.get_stat('vx')) > abs(self.get_stat('vy')):
+            x_time = int(round(abs(self.get_stat('vx')) / abs(self.get_stat(
+                'vy')), 0))
+            y_time = 1
+        elif abs(self.get_stat('vx')) < abs(self.get_stat('vy')):
+            x_time = 1
+            y_time = int(round(abs(self.get_stat('vy')) / abs(self.get_stat(
+                'vx')), 0))
+        else:
+            x_time, y_time = 1, 1
+
+        while x_d > 0 or y_d > 0:
+            for i in range(x_time):
+                if x_d > 0:
+                    if x_d >= 1:
+                        value = self.get_stat('vx') / abs(self.get_stat('vx'))
+                        x_d -= 1
+                    else:
+                        value = self.get_stat('vx') - int(self.get_stat('vx'))
+                        x_d = 0
+                    self.x += value
+                    n_x = int(self.x)
+                    if abs(n_x - c_x) >= 1:
+                        for particle in particles:
+                            #  particles are guaranteed to implement the
+                            #  collidable interface
+                            if particle.solid and self.solid \
+                                    and self.detect_collision(particle):
+                                self.x -= value
+                                x_d = 0
+                                break
+
+            for i in range(y_time):
+                if y_d > 0:
+                    if y_d >= 1:
+                        value = self.get_stat('vy') / abs(self.get_stat('vy'))
+                        y_d -= 1
+                    else:
+                        value = self.get_stat('vy') - int(self.get_stat('vy'))
+                        y_d = 0
+                    self.y += value
+                    n_y = int(self.y)
+                    if abs(n_y - c_y) >= 1:
+                        for particle in particles:
+                            #  particles are guaranteed to implement the
+                            #  collidable interface
+                            if particle.solid and self.solid \
+                                    and self.detect_collision(particle):
+                                self.y -= value
+                                y_d = 0
+                                break
+
+
+class Creature(MovableParticle, Living, Lightable):
+    """
+    Description: Movable particles that can act on its own
 
     Additional Attributes:
         light_on: Whether this creature is illuminating its surroundings
@@ -300,89 +396,11 @@ class Creature(DirectionalParticle, Movable, Living, Lightable):
                 screen, self.color, pygame.Rect(location[0] + radius, location[
                     1] + radius, radius, radius))
 
-    def aim(self, obj: Positional) -> None:
-        cx = self.x + self.diameter / 2 - 1
-        cy = self.y + self.diameter / 2 - 1
-        obj = (obj.x, obj.y)
-        if isinstance(obj, Collidable):
-            obj = (obj.x + obj.diameter / 2 - 1, obj.y + obj.diameter / 2 - 1)
-        self.direction = get_direction((cx, cy), obj)
-
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
         """ AI of this creature, this method should
         be called on every active creature regularly
         """
         raise NotImplementedError
-
-    def update_position(self) -> None:
-        x_d = abs(self.get_stat('vx'))
-        y_d = abs(self.get_stat('vy'))
-        c_x = int(self.x)
-        c_y = int(self.y)
-        particles = []
-        for row in self._surrounding_tiles:
-            row = self._surrounding_tiles[row]
-            for p in row:
-                particles.append(row[p])
-        particles += self.get_adjacent_entities(True)
-        if self in particles:
-            particles.remove(self)
-
-        if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
-            return
-        if self.get_stat('vx') == 0:
-            x_time = 0
-            y_time = 1
-        elif self.get_stat('vy') == 0:
-            x_time = 1
-            y_time = 0
-        elif abs(self.get_stat('vx')) > abs(self.get_stat('vy')):
-            x_time = int(round(abs(self.get_stat('vx')) / abs(self.get_stat(
-                'vy')), 0))
-            y_time = 1
-        elif abs(self.get_stat('vx')) < abs(self.get_stat('vy')):
-            x_time = 1
-            y_time = int(round(abs(self.get_stat('vy')) / abs(self.get_stat(
-                'vx')), 0))
-        else:
-            x_time, y_time = 1, 1
-
-        while x_d > 0 or y_d > 0:
-            for i in range(x_time):
-                if x_d > 0:
-                    if x_d >= 1:
-                        value = self.get_stat('vx') / abs(self.get_stat('vx'))
-                        x_d -= 1
-                    else:
-                        value = self.get_stat('vx') - int(self.get_stat('vx'))
-                        x_d = 0
-                    self.x += value
-                    n_x = int(self.x)
-                    if abs(n_x - c_x) >= 1:
-                        for particle in particles:
-                            if particle.solid and self.solid and self.detect_collision(
-                                    particle):
-                                self.x -= value
-                                x_d = 0
-                                break
-
-            for i in range(y_time):
-                if y_d > 0:
-                    if y_d >= 1:
-                        value = self.get_stat('vy') / abs(self.get_stat('vy'))
-                        y_d -= 1
-                    else:
-                        value = self.get_stat('vy') - int(self.get_stat('vy'))
-                        y_d = 0
-                    self.y += value
-                    n_y = int(self.y)
-                    if abs(n_y - c_y) >= 1:
-                        for particle in particles:
-                            if particle.solid and self.solid and self.detect_collision(
-                                    particle):
-                                self.y -= value
-                                y_d = 0
-                                break
 
     def light(self):
         tile = self.get_tile_in_contact()
@@ -399,13 +417,42 @@ class Creature(DirectionalParticle, Movable, Living, Lightable):
         Particle.remove(self)
         Creature.creature_group.pop(self.id, None)
 
-    def get_tile_in_contact(self) -> Particle:
-        col = int((self.x - 1 + self.diameter / 2) // TILE_SIZE)
-        row = int((self.y - 1 + self.diameter / 2) // TILE_SIZE)
-        return self._surrounding_tiles[row][col]
+
+class SweepAttackable(Creature, Attackable):
+
+    def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
+        Creature.__init__(self, info)
+        Attackable.__init__(self, info)
+
+    def basic_attack(self, target=None) -> bool:
+        """ Perform an attack and reset the attack counter """
+        if self.can_attack():
+            c1x = self.x - 1 + self.get_stat('diameter') / 2
+            c1y = self.y - 1 + self.get_stat('diameter') / 2
+            c2x = c1x - self.get_stat('attack_range')
+            c2y = c1y - self.get_stat('attack_range')
+            info = {
+                'diameter': self.get_stat('attack_range') * 2 + 1,
+                'shape': self.shape,
+                'texture': 'attack_circle_64.png',
+                'owner': self,
+                'x': c2x,
+                'y': c2y,
+                'map_name': self.map_name
+            }
+            collision_box = CollisionBox(info)
+            for entity in self.get_adjacent_entities(True):
+                if not entity.id == self.id and isinstance(entity, Living):
+                    if collision_box.detect_collision(entity):
+                        entity.health -= self.get_stat('attack_power')
+            self._attack_counter = 0
+            return True
+        return False
 
 
-class Player(Creature, Attackable):
+class Player(SweepAttackable):
     """
     Description: Player class
 
@@ -422,8 +469,7 @@ class Player(Creature, Attackable):
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         if called(self.__class__.__name__, info):
             return
-        Creature.__init__(self, info)
-        Attackable.__init__(self, info)
+        SweepAttackable.__init__(self, info)
         Player.player_group[self.id] = self
         self.pressed_keys = []
         self.mouse_buttons = (0, 0, 0)
@@ -473,31 +519,8 @@ class Player(Creature, Attackable):
 
         # attack
         if self.mouse_buttons[0] == 1:
-            self.attack(None)
+            self.perform_act('basic_attack')
         self.update_position()
-
-    def attack(self, target=None) -> None:
-        """ Perform an attack and reset the attack counter """
-        if self.can_attack():
-            c1x = self.x - 1 + self.get_stat('diameter') / 2
-            c1y = self.y - 1 + self.get_stat('diameter') / 2
-            c2x = c1x - self.get_stat('attack_range')
-            c2y = c1y - self.get_stat('attack_range')
-            info = {
-                'diameter': self.get_stat('attack_range') * 2 + 1,
-                'shape': self.shape,
-                'texture': 'attack_circle_64.png',
-                'owner': self,
-                'x': c2x,
-                'y': c2y,
-                'map_name': self.map_name
-            }
-            collision_box = CollisionBox(info)
-            for entity in self.get_adjacent_entities(True):
-                if not entity.id == self.id and isinstance(entity, Living):
-                    if collision_box.detect_collision(entity):
-                        entity.health -= self.get_stat('attack_power')
-            self._attack_counter = 0
 
     def remove(self):
         Creature.remove(self)
@@ -532,7 +555,7 @@ class Block(CollidableParticle, Lightable):
                     block.light()
 
 
-class NPC(Creature, Attackable):
+class NPC(SweepAttackable):
     """ Description: Non-Player Character class
 
     Additional Attributes:
@@ -544,38 +567,15 @@ class NPC(Creature, Attackable):
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         if called(self.__class__.__name__, info):
             return
-        Creature.__init__(self, info)
-        Attackable.__init__(self, info)
+        SweepAttackable.__init__(self, info)
         NPC.npc_group[self.id] = self
 
     def query_info(self):
         pass
 
-    def attack(self, target=None):
-        if self.can_attack():
-            c1x = self.x - 1 + self.get_stat('diameter') / 2
-            c1y = self.y - 1 + self.get_stat('diameter') / 2
-            c2x = c1x - self.get_stat('attack_range')
-            c2y = c1y - self.get_stat('attack_range')
-            info = {
-                'diameter': self.get_stat('attack_range') * 2 + 1,
-                'shape': self.shape,
-                'texture': 'attack_circle_64.png',
-                'owner': self,
-                'x': c2x,
-                'y': c2y,
-                'map_name': self.map_name
-            }
-            collision_box = CollisionBox(info)
-            for entity in self.get_adjacent_entities(True):
-                if not entity.id == self.id and isinstance(entity, Living):
-                    if collision_box.detect_collision(entity):
-                        entity.health -= self.get_stat('attack_power')
-            self._attack_counter = 0
-
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
         if self.can_attack():
-            self.attack()
+            self.perform_act('basic_attack')
         self.update_position()
 
     def remove(self):

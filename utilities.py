@@ -1,6 +1,6 @@
 from __future__ import annotations
-from typing import Union, List, Optional, Any, Tuple
-from error import UnknownShapeError
+from typing import Union, List, Optional, Any, Tuple, Callable
+from error import UnknownShapeError, UnknownStaminaCostError
 from bool_expr import BoolExpr, construct_from_list, construct_from_str
 from settings import *
 import math
@@ -319,6 +319,55 @@ class Lightable(DynamicStats):
                                            other.get_stat('brightness')})
 
 
+class Regenable(DynamicStats):
+    """ Description: Interface that provides access to resource regeneration
+
+    === Public Attributes ===
+    - regen_stats: A collection of stats that can be regenerated
+    - stats_max: The maximum value the stats can be regenerated to
+    - regen stats in regen_stats
+
+    === Representation Invariants ===
+    - Regeneration can only be applied to numeric attributes
+    - Values in regen_stats must be numeric
+    - Regeneration is directly applied to the base stat
+    - regen_stats can contain negative values, which results in stats depletion
+    """
+    regen_stats: List[str]
+    stats_max: List[str]
+
+    def __init__(self, info: dict[str, Union[int, float, str, List]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
+        DynamicStats.__init__(self)
+        self.regen_stats = []
+        self.stats_max = []
+        for item in info:
+            if "max_" in item:
+                self.stats_max.append(item)
+            elif '_regen' in item:
+                attr = item[0:-6]
+                self.regen_stats.append(attr)
+                setattr(self, item, info[item])
+
+    def regen(self) -> None:
+        """ Regenerate stats, this method should called every frame """
+        for r in self.regen_stats:
+            if hasattr(self, r):
+                value = round(self.get_stat(r + "_regen") / FPS, 2)
+                result = value + getattr(self, r)
+                max_stat = "max_" + r
+                if max_stat in self.stats_max:
+                    if result > getattr(self, max_stat):
+                        setattr(self, r, getattr(self, max_stat))
+                    else:
+                        setattr(self, r, result)
+                else:
+                    setattr(self, r, result)
+            else:
+                self.regen_stats.remove(r)
+
+
 class Living(DynamicStats):
     """ Description: Interface for living objects
 
@@ -347,6 +396,12 @@ class Living(DynamicStats):
             setattr(self, a, info[a])
         DynamicStats.__init__(self)
 
+    def calculate_health(self) -> None:
+        """ Update health with value changes in the buffer """
+        self.health = self.get_stat('health')
+        if 'health' in self._buffer_stats:
+            self._buffer_stats['health'] = 0
+
     def is_dead(self) -> bool:
         """ Check whether this object is dead """
         return self.get_stat('death').eval(vars(self))
@@ -355,7 +410,58 @@ class Living(DynamicStats):
         raise NotImplementedError
 
 
-class Attackable(DynamicStats):
+class Staminaized(Regenable):
+    """ Interface that provides access to advanced movements
+
+    === Public Attributes ===
+    - stamina: The required stats to perform advanced movements
+    - max_stamina: The maximum amount of stamina this unit can have
+    """
+    stamina: float
+    max_stamina: float
+    stamina_costs: dict[str, float]
+    actions: dict[str, Callable]
+
+    def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
+        if called(self.__class__.__name__, info):
+            return
+        attr = ['stamina', 'max_stamina']
+        default = {
+            'stamina': DEFAULT_STAMINA,
+            'max_stamina': DEFAULT_MAX_STAMINA,
+            'stamina_regen': DEFAULT_STAMINA_REGEN
+        }
+        self.actions = {}
+        self.stamina_costs = {}
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+        for a in attr:
+            setattr(self, a, info[a])
+        Regenable.__init__(self, info)
+
+    def can_act(self, name: str) -> bool:
+        """ Return whether the given action can be performed """
+        if name in self.actions:
+            if name in self.stamina_costs:
+                return self.stamina >= self.stamina_costs[name]
+            raise UnknownStaminaCostError
+        return False
+
+    def perform_act(self, name: str, *args: Optional) -> None:
+        """ Execute the given action """
+        if self.can_act(name):
+            # consume stamina if successfully executed movements
+            if self.actions[name](*args):
+                self.stamina -= self.stamina_costs[name]
+
+    def add_movement(self, name: str, cost: float) -> None:
+        """ Add movement methods to this object """
+        self.actions[name] = getattr(self, name)
+        self.stamina_costs[name] = cost
+
+
+class Attackable(Staminaized):
     """ Attacking Interface that provides offensive movements
 
     === Public Attributes ===
@@ -388,17 +494,18 @@ class Attackable(DynamicStats):
                 info[key] = default[key]
         for a in attr:
             setattr(self, a, info[a])
-        DynamicStats.__init__(self)
+        Staminaized.__init__(self, info)
+        self.add_movement("basic_attack", DEFAULT_BASIC_ATTACK_COST)
 
     def count(self) -> None:
         """ Increase the attack counter by 1 each frame. """
-        if self._attack_counter < self.attack_speed:
+        if not self.can_attack():
             self._attack_counter += 1
 
     def can_attack(self) -> bool:
-        return self._attack_counter >= self.attack_speed
+        return self._attack_counter >= (FPS // self.get_stat('attack_speed'))
 
-    def attack(self, targets: Optional[List[Living]]) -> None:
+    def basic_attack(self, targets: Optional[List[Living]]) -> bool:
         """ Perform an attack and reset the attack counter """
         raise NotImplementedError
 

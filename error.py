@@ -78,3 +78,13 @@ class InvalidConstructionInfo(Exception):
     def __str__(self) -> str:
         """ Return a string representation of this error. """
         return 'Invalid construction info!'
+
+
+class UnknownStaminaCostError(Exception):
+    """ Exception raised when the stamina required to perform the action is
+    unknown
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'Stamina cost unknown!'

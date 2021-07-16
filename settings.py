@@ -24,9 +24,14 @@ DEFAULT_PARTICLE_NAME = "particle"  # used while not reading data from map files
 DEFAULT_HEALTH = 100
 DEFAULT_MAX_HEALTH = 100
 
+# Staminaized interface
+DEFAULT_STAMINA = 0
+DEFAULT_MAX_STAMINA = 100
+DEFAULT_STAMINA_REGEN = 25
+
 # Attackable interface
 DEFAULT_ATTACK_DAMAGE = 40
 DEFAULT_ATTACK_RANGE = TILE_SIZE // 2
-DEFAULT_ATTACK_SPEED = FPS * 2  # 2 seconds per attack
-
+DEFAULT_ATTACK_SPEED = 1  # attacks per sec
+DEFAULT_BASIC_ATTACK_COST = 45  # stamina consumed per attack
 

@@ -4,7 +4,7 @@ import pygame
 from effect import *
 from particles import *
 from utilities import Positional, Movable, Collidable, Attackable, \
-    DynamicStats
+    DynamicStats, Regenable
 from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
 from settings import *
@@ -331,8 +331,8 @@ class Level:
             'player_info'].render("Health", True, (255, 255, 0))
         self.texts['resource_bar'] = self.fonts[
             'player_info'].render("Mana", True, (0, 100, 255))
-        self.texts['stamina'] = self.fonts[
-            'player_info'].render("Sta,oma", True, (0, 255, 0))
+        self.texts['stamina_bar'] = self.fonts[
+            'player_info'].render("Stamina", True, (0, 255, 0))
 
     def run(self, screen: pygame.Surface, difficulty=0):
         """
@@ -397,6 +397,9 @@ class Level:
                 if isinstance(particle, CollisionBox):
                     particle.sync()
 
+            if isinstance(particle, Regenable):
+                particle.regen()
+
         # update entity surroundings
         for game_map in self._game_maps:
             self._game_maps[game_map].update_contents()
@@ -427,8 +430,9 @@ class Level:
     def player_info_display(self, player: Player, screen: pygame.Surface):
         health_bar_width = 300
         health_bar_height = 12
-        resource_bar_length = 200
-        stamina_bar_length = 150
+        resource_bar_width = 200
+        stamina_bar_height = 12
+        stamina_bar_width = 150
 
         health_percent = player.health / player.max_health
         health_bar = pygame.Surface((health_percent * health_bar_width,
@@ -436,6 +440,13 @@ class Level:
         health_bar.fill((255, 0, 0))
         screen.blit(self.texts['health_bar'], (80, 60))
         screen.blit(health_bar, (80, 80))
+
+        stamina_percent = player.stamina / player.max_stamina
+        stamina_bar = pygame.Surface((stamina_percent * stamina_bar_width,
+                                      stamina_bar_height))
+        stamina_bar.fill((0, 255, 0))
+        screen.blit(self.texts['stamina_bar'], (80, 100))
+        screen.blit(stamina_bar, (80, 120))
 
     def exit(self):
         """
