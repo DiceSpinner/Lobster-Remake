@@ -88,3 +88,22 @@ class UnknownStaminaCostError(Exception):
     def __str__(self) -> str:
         """ Return a string representation of this error. """
         return 'Stamina cost unknown!'
+
+
+class UnknownManaCostError(Exception):
+    """ Exception raised when the mana required to perform the action is
+    unknown
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'Mana cost unknown!'
+
+
+class UnknownCooldownError(Exception):
+    """ Exception raised when the cooldown of the spell is unknown
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'Spell cooldown unknown!'

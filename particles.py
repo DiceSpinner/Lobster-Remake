@@ -2,7 +2,8 @@ from __future__ import annotations
 import pygame
 from typing import List, Tuple, Union, Optional, Any
 from utilities import Positional, Movable, Collidable, Lightable, Living, \
-    Directional, Attackable, get_direction, DynamicStats, called
+    Directional, Attackable, get_direction, DynamicStats, \
+    ExplosionProjectileCastable
 from bool_expr import BoolExpr, construct_from_str
 from settings import *
 from error import InvalidConstructionInfo
@@ -40,7 +41,7 @@ class Particle(Positional, DynamicStats):
     _surrounding_entities: dict[int, dict[int, List[Particle]]]
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
-        if called(self.__class__.__name__, info):
+        if hasattr(self, "id"):
             return
         default = {
             'display_priority': DEFAULT_DISPLAY_PRIORITY,
@@ -144,8 +145,6 @@ class CollidableParticle(Particle, Collidable):
     """ Particles that implements the collidable interface """
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         Particle.__init__(self, info)
         Collidable.__init__(self, info)
         self._texture = pygame.transform.scale(self._texture,
@@ -174,8 +173,6 @@ class CollisionBox(CollidableParticle):
     collsion_box_group = {}
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         if "display_priority" not in info:
             info['display_priority'] = 1
         CollidableParticle.__init__(self, info)
@@ -226,8 +223,6 @@ class DirectionalParticle(CollidableParticle, Directional):
     """ Collidable particles that implements the directional interface """
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         CollidableParticle.__init__(self, info)
         Directional.__init__(self, info)
         if self.texture not in Particle.rotation:
@@ -267,15 +262,15 @@ class MovableParticle(DirectionalParticle, Movable):
     """
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         DirectionalParticle.__init__(self, info)
 
-    def update_position(self) -> None:
+    def calculate_order(self) -> Tuple[float, float, int, int, int, int]:
         x_d = abs(self.get_stat('vx'))
         y_d = abs(self.get_stat('vy'))
         c_x = int(self.x)
         c_y = int(self.y)
+        if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
+            return 0, 0, 0, 0, 0, 0
         particles = []
         for row in self._surrounding_tiles:
             row = self._surrounding_tiles[row]
@@ -303,7 +298,18 @@ class MovableParticle(DirectionalParticle, Movable):
                 'vx')), 0))
         else:
             x_time, y_time = 1, 1
+        return x_d, y_d, c_x, c_y, x_time, y_time
 
+    def update_position(self) -> None:
+        particles = []
+        for row in self._surrounding_tiles:
+            row = self._surrounding_tiles[row]
+            for p in row:
+                particles.append(row[p])
+        particles += self.get_adjacent_entities(True)
+        if self in particles:
+            particles.remove(self)
+        x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
         while x_d > 0 or y_d > 0:
             for i in range(x_time):
                 if x_d > 0:
@@ -324,7 +330,6 @@ class MovableParticle(DirectionalParticle, Movable):
                                 self.x -= value
                                 x_d = 0
                                 break
-
             for i in range(y_time):
                 if y_d > 0:
                     if y_d >= 1:
@@ -366,9 +371,6 @@ class Creature(MovableParticle, Living, Lightable):
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
         if "display_priority" not in info:
             info['display_priority'] = 2
-
-        if called(self.__class__.__name__, info):
-            return
         DirectionalParticle.__init__(self, info)
         self._texture = pygame.transform.scale(
             Particle.textures[self.texture], (self.diameter * 2,
@@ -440,9 +442,8 @@ class SweepAttackable(Creature, Attackable):
     the methods.
 
     """
+
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         Creature.__init__(self, info)
         Attackable.__init__(self, info)
 
@@ -475,7 +476,137 @@ class SweepAttackable(Creature, Attackable):
         return False
 
 
-class Player(SweepAttackable):
+class Fireball(SweepAttackable):
+    """ A projectile that damages nearby living particles on contact
+
+    === Public Attributes ===
+    - avoid
+    - dead
+    """
+    avoid: List[int]
+    dead: bool
+
+    def __init__(self, info: dict[str, Union[str, float, int, Tuple, List]]) \
+            -> None:
+        SweepAttackable.__init__(self, info)
+        self.avoid = info['avoid']
+        self.dead = False
+
+    def can_attack(self) -> bool:
+        return True
+
+    def basic_attack(self, target=None) -> bool:
+        SweepAttackable.basic_attack(self)
+        self.dead = True
+        return True
+
+    def is_dead(self) -> bool:
+        return self.dead
+
+    def action(self, optional=None):
+        self.move(self.direction)
+        self.update_position()
+
+    def update_position(self) -> None:
+        x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
+        particles = []
+        for row in self._surrounding_tiles:
+            row = self._surrounding_tiles[row]
+            for p in row:
+                particles.append(row[p])
+        particles += self.get_adjacent_entities(True)
+        while x_d > 0 or y_d > 0:
+            for i in range(x_time):
+                if x_d > 0:
+                    if x_d >= 1:
+                        value = self.get_stat('vx') / abs(self.get_stat('vx'))
+                        x_d -= 1
+                    else:
+                        value = self.get_stat('vx') - int(self.get_stat('vx'))
+                        x_d = 0
+                    self.x += value
+                    n_x = int(self.x)
+                    if abs(n_x - c_x) >= 1:
+                        for particle in particles:
+                            #  particles are guaranteed to implement the
+                            #  collidable interface
+                            if isinstance(particle, Living) and particle.solid\
+                                 and not particle.id not in self.avoid \
+                                    and self.detect_collision(particle):
+                                self.basic_attack()
+                                x_d = 0
+                                y_d = 0
+                                break
+
+            for i in range(y_time):
+                if y_d > 0:
+                    if y_d >= 1:
+                        value = self.get_stat('vy') / abs(self.get_stat('vy'))
+                        y_d -= 1
+                    else:
+                        value = self.get_stat('vy') - int(self.get_stat('vy'))
+                        y_d = 0
+                    self.y += value
+                    n_y = int(self.y)
+                    if abs(n_y - c_y) >= 1:
+                        for particle in particles:
+                            #  particles are guaranteed to implement the
+                            #  collidable interface
+                            if isinstance(particle, Living) and particle.solid \
+                                    and not particle.id not in self.avoid \
+                                    and self.detect_collision(particle):
+                                self.basic_attack()
+                                x_d = 0
+                                y_d = 0
+                                break
+
+
+class ProjectileAttackable(Creature, ExplosionProjectileCastable):
+    """ Creatures with a default implementation of the fireball launch method
+    , must be inherited by other sub-creature classes in order to utilize
+    the methods.
+
+    === Additional Attributes ===
+    - projectile_diameter: diameter of the projectile to be launched
+    """
+
+    def __init__(self, info: dict[str, Union[str, float, int]],
+                 flag: Optional[bool]) -> None:
+        if not flag:
+            Creature.__init__(self, info)
+        ExplosionProjectileCastable.__init__(self, info)
+
+    def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
+        raise NotImplementedError
+
+    def fireball(self) -> bool:
+        """ Damage every nearby creatures inside the explosion range of
+        the fireball
+        """
+        if self.can_cast("fireball"):
+            c1x = self.x - 1 + self.get_stat('diameter') / 2
+            c1y = self.y - 1 + self.get_stat('diameter') / 2
+            exd = self.get_stat('explosion_diameter')
+            c2x = c1x - exd
+            c2y = c1y - exd
+            info = {
+                'diameter': exd,
+                'shape': self.shape,
+                'texture': 'fireball.png',
+                'avoid': [self.id],
+                'attack_damage': self.ability_power,
+                'speed': DEFAULT_PROJECTILE_SPEED,
+                'direction': self.direction,
+                'x': c2x,
+                'y': c2y,
+                'map_name': self.map_name
+            }
+            Fireball(info)
+            return True
+        return False
+
+
+class Player(SweepAttackable, ProjectileAttackable):
     """
     Description: Player class
 
@@ -490,9 +621,10 @@ class Player(SweepAttackable):
     mouse_buttons: Tuple[int, int, int]
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         SweepAttackable.__init__(self, info)
+        print(self.actions)
+        ProjectileAttackable.__init__(self, info, True)
+        print(self.actions)
         Player.player_group[self.id] = self
         self.pressed_keys = []
         self.mouse_buttons = (0, 0, 0)
@@ -543,7 +675,14 @@ class Player(SweepAttackable):
         # attack
         if self.mouse_buttons[0] == 1:
             self.perform_act('basic_attack')
+        if pygame.K_q in self.pressed_keys:
+            self.perform_act('fireball')
         self.update_position()
+
+    def basic_attack(self, target=None) -> bool:
+        print("called")
+
+        return SweepAttackable.basic_attack(self, None)
 
     def remove(self):
         Creature.remove(self)
@@ -557,8 +696,6 @@ class Block(CollidableParticle, Lightable):
     block_group = {}
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         CollidableParticle.__init__(self, info)
         Lightable.__init__(self, info)
         Block.block_group[self.id] = self
@@ -588,8 +725,6 @@ class NPC(SweepAttackable):
     npc_group = {}
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         SweepAttackable.__init__(self, info)
         NPC.npc_group[self.id] = self
 

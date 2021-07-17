@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Union, List, Optional, Any, Tuple, Callable
-from error import UnknownShapeError, UnknownStaminaCostError
+from error import UnknownShapeError, UnknownStaminaCostError, \
+    UnknownManaCostError, UnknownCooldownError
 from bool_expr import BoolExpr, construct_from_list, construct_from_str
 from settings import *
 import math
@@ -60,8 +61,6 @@ class Positional:
     y: float
 
     def __init__(self, info: dict[str, Union[str, int]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         attr = ['x', 'y', 'map_name']
         for item in attr:
             if item not in info:
@@ -89,8 +88,6 @@ class Movable(Positional, DynamicStats):
     speed: float
 
     def __init__(self, info: dict[str, Union[str, float]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         Positional.__init__(self, info)
         attr = ['vx', 'vy', 'ax', 'ay', 'speed']
         default = {
@@ -116,7 +113,7 @@ class Movable(Positional, DynamicStats):
         """
         raise NotImplementedError
 
-    def move(self, direction: Union[int, Positional]) -> None:
+    def move(self, direction: Union[float, Positional]) -> None:
         """ Move towards the target direction or object """
         if isinstance(direction, Positional):
             direction = get_direction((self.x, self.y), (direction.x,
@@ -143,8 +140,6 @@ class Directional(Positional):
     direction: float
 
     def __init__(self, info: dict[str, Union[str, float]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         Positional.__init__(self, info)
         attr = ['direction']
         default = {
@@ -180,8 +175,6 @@ class Collidable(Positional, DynamicStats):
     solid: bool
 
     def __init__(self, info: dict[str, Union[int, str]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         Positional.__init__(self, info)
         attr = ['diameter', 'shape', 'solid']
         default = {
@@ -290,8 +283,6 @@ class Lightable(DynamicStats):
     light_resistance: int
 
     def __init__(self, info: dict[str, Union[int, str]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         attr = ['brightness', 'light_source', 'light_resistance']
         default = {
             'brightness': 0,
@@ -338,8 +329,6 @@ class Regenable(DynamicStats):
     stats_max: List[str]
 
     def __init__(self, info: dict[str, Union[int, float, str, List]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         DynamicStats.__init__(self)
         self.regen_stats = []
         self.stats_max = []
@@ -361,8 +350,9 @@ class Regenable(DynamicStats):
                 result = value + getattr(self, r)
                 max_stat = "max_" + r
                 if max_stat in self.stats_max:
-                    if result > getattr(self, max_stat):
-                        setattr(self, r, getattr(self, max_stat))
+                    max_value = self.get_stat(max_stat)
+                    if result > max_value:
+                        setattr(self, r, max_value)
                     else:
                         setattr(self, r, result)
                 else:
@@ -371,7 +361,7 @@ class Regenable(DynamicStats):
                 self.regen_stats.remove(r)
 
 
-class Living(DynamicStats):
+class Living(Regenable):
     """ Description: Interface for living objects
 
     === Public Attributes ===
@@ -384,11 +374,10 @@ class Living(DynamicStats):
     death: BoolExpr
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         attr = ['health', 'max_health', 'death']
         default = {
             'health': DEFAULT_HEALTH,
+            'health_regen': DEFAULT_HEALTH_REGEN,
             'max_health': DEFAULT_MAX_HEALTH,
             'death': construct_from_str("( not health > 0 )")
         }
@@ -397,7 +386,7 @@ class Living(DynamicStats):
                 info[key] = default[key]
         for a in attr:
             setattr(self, a, info[a])
-        DynamicStats.__init__(self)
+        Regenable.__init__(self, info)
 
     def calculate_health(self) -> None:
         """ Update health with value changes in the buffer """
@@ -419,6 +408,8 @@ class Staminaized(Regenable):
     === Public Attributes ===
     - stamina: The required stats to perform advanced movements
     - max_stamina: The maximum amount of stamina this unit can have
+    - stamina_costs: The collection of the cost of all staminaized actions
+    - actions: The collection of all staminzed actions this unit can perform
     """
     stamina: float
     max_stamina: float
@@ -426,8 +417,6 @@ class Staminaized(Regenable):
     actions: dict[str, Callable]
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         attr = ['stamina', 'max_stamina']
         default = {
             'stamina': DEFAULT_STAMINA,
@@ -458,14 +447,76 @@ class Staminaized(Regenable):
             if self.actions[name](*args):
                 self.stamina -= self.stamina_costs[name]
 
-    def add_movement(self, name: str, cost: float) -> None:
-        """ Add movement methods to this object """
-        self.actions[name] = getattr(self, name)
-        self.stamina_costs[name] = cost
+    def add_movement(self, info: dict[str, Union[str, float, int]]) -> None:
+        """ Add movement methods to this object
+
+        Pre-condition: info contains all of the following
+            1. name of the action accessed by "name"
+            2. stamina cost of the action accessed by "stamina_cost"
+        """
+        self.actions[info['name']] = getattr(self, info['name'])
+        self.stamina_costs[info['name']] = info['stamina_cost']
+
+
+class Manaized(Staminaized):
+    """ Interface that provides access to movements that depletes resource bar
+
+    === Public Attributes ===
+    - mana: The required stats to perform manaized movements
+    - max_mana: The maximum amount of mana this unit can have
+    - mana_costs: The collection of the cost of all staminaized actions
+    """
+    mana: float
+    max_mana: float
+    mana_costs: dict[str, float]
+
+    def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
+        attr = ['mana', 'max_mana']
+        default = {
+            'mana': DEFAULT_MANA,
+            'max_mana': DEFAULT_MAX_MANA,
+            'mana_regen': DEFAULT_MANA_REGEN
+        }
+        self.mana_costs = {}
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+        for a in attr:
+            setattr(self, a, info[a])
+        Staminaized.__init__(self, info)
+
+    def can_act(self, name: str) -> bool:
+        """ Return whether the given action can be performed """
+        if Staminaized.can_act(self, name):
+            if name in self.actions:
+                if name in self.mana_costs:
+                    return self.mana >= self.mana_costs[name]
+            raise UnknownManaCostError
+        return False
+
+    def perform_act(self, name: str, *args: Optional) -> None:
+        """ Execute the given action """
+        if self.can_act(name):
+            # consume stamina/mana if successfully executed movements
+            if self.actions[name](*args):
+                self.stamina -= self.stamina_costs[name]
+                self.mana -= self.mana_costs[name]
+
+    def add_movement(self, info: dict[str, Union[str, float, int]]) -> None:
+        """ Add movement methods to this object
+
+        Pre-condition: info contains all of the following
+            1. name of the action accessed by "name"
+            2. stamina cost of the action accessed by "stamina_cost"
+            3. mana cost of the action accessed by "mana_cost"
+        """
+        self.actions[info['name']] = getattr(self, info['name'])
+        self.stamina_costs[info['name']] = info['stamina_cost']
+        self.mana_costs[info['name']] = info['mana_cost']
 
 
 class Attackable(Staminaized):
-    """ Attacking Interface that provides offensive movements
+    """ Attacking Interface that provides basic offensive movement
 
     === Public Attributes ===
     - attack_power: The strength of the attack
@@ -482,8 +533,6 @@ class Attackable(Staminaized):
     _attack_counter: int
 
     def __init__(self, info: dict[str, Union[int, float]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         self._attack_counter = 0
         attr = ['attack_power', 'attack_speed', 'attack_range']
         default = {
@@ -498,7 +547,8 @@ class Attackable(Staminaized):
         for a in attr:
             setattr(self, a, info[a])
         Staminaized.__init__(self, info)
-        self.add_movement("basic_attack", DEFAULT_BASIC_ATTACK_COST)
+        Attackable.add_movement(self, {'name': 'basic_attack',
+                           'stamina_cost': DEFAULT_BASIC_ATTACK_COST})
 
     def count(self) -> None:
         """ Increase the attack counter by 1 each frame. """
@@ -513,6 +563,95 @@ class Attackable(Staminaized):
 
         Return True if executed successfully
         """
+        raise NotImplementedError
+
+
+class SpellCastable(Manaized):
+    """ Interface that provides access to spell casting
+
+    === Public Attributes ===
+    - ability_power: The scaling factor of the strength of spells casted
+        by this unit
+    - ability_cooldown: The collection of the cooldowns of the spells of
+        this unit
+
+    === Private Attributes ===
+    - _ability_counter: The collection of the counter of the cooldowns of the
+        spells of this unit
+    """
+    ability_power: float
+    ability_cooldown: {}
+    _ability_counter: {}
+
+    def __init__(self, info: dict[str, Union[int, float]]) -> None:
+        attr = ['ability_power']
+        default = {
+            'ability_power': DEFAULT_ABILITY_POWER,
+        }
+        self.ability_cooldown = {}
+        self._ability_counter = {}
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+        for a in attr:
+            setattr(self, a, info[a])
+        Manaized.__init__(self, info)
+
+    def count(self) -> None:
+        """ Increase the cooldown counter by 1 per frame. """
+        for counter in self._ability_counter:
+            if counter in self.ability_cooldown:
+                value = self.ability_cooldown[counter] * FPS
+                if self._ability_counter[counter] < value:
+                    self._ability_counter[counter] += 1
+            else:
+                raise UnknownCooldownError
+
+    def can_cast(self, name: str) -> bool:
+        return self.ability_cooldown[name] <= self._ability_counter[name] \
+                   * FPS
+
+    def add_movement(self, info: dict[str, Union[str, float, int]]) -> None:
+        """ Register movement methods to this object
+
+        Pre-condition: info contains all of the following
+            1. name of the action accessed by "name"
+            2. stamina cost of the action accessed by "stamina_cost"
+            3. mana cost of this spell accessed by "mana_cost"
+            4. cooldown of this spell accessed by "cooldown"
+        """
+        Manaized.add_movement(self, info)
+        self.ability_cooldown[info["name"]] = info['cooldown']
+        self._ability_counter[info['name']] = 0
+
+
+class ExplosionProjectileCastable(SpellCastable):
+    """ Interface that provides access to explosion projectile spell casts
+
+    === Public Attributes ===
+    - explosion_diameter: The diameter of the explosion
+    """
+    def __init__(self, info: dict[str, Union[int, float]]) -> None:
+        attr = ['explosion_diameter']
+        default = {
+            'explosion_diameter': DEFAULT_EXPLOSION_DIAMETER,
+        }
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+        for a in attr:
+            setattr(self, a, info[a])
+        SpellCastable.__init__(self, info)
+        item = {
+            'name': 'fireball',
+            'cooldown': DEFAULT_ABILITY_COOLDOWN,
+            'stamina_cost': DEFAULT_ABILITY_STAMINA_COST,
+            'mana_cost': DEFAULT_ABILITY_MANA_COST
+        }
+        self.add_movement(item)
+
+    def fireball(self):
+        """ Launch a fireball that damages other units """
         raise NotImplementedError
 
 
@@ -560,13 +699,3 @@ def get_direction(obj1: Tuple[float, float], obj2: Tuple[float, float]) \
         while value < 0:
             value += 360
     return round(value, 1)
-
-
-def called(name: str, info: dict[Any]) -> bool:
-    if "called" in info:
-        if isinstance(info['called'], List):
-            if name in info['called']:
-                return True
-        info['called'] = [name]
-        return False
-    return False

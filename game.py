@@ -352,16 +352,13 @@ class Level:
                                   self._game_maps)
         player_key = list(Player.player_group)[0]
         player = Player.player_group[player_key]
-
         player_input = []
-
         # mouse tracking
         mouse_pos = pygame.mouse.get_pos()
         pos = Positional({})
         pos.x = mouse_pos[0] + self._camera.x
         pos.y = mouse_pos[1] + self._camera.y
         player.aim(pos)
-
         # player input and other game actions
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
