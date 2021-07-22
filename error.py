@@ -107,3 +107,12 @@ class UnknownCooldownError(Exception):
     def __str__(self) -> str:
         """ Return a string representation of this error. """
         return 'Spell cooldown unknown!'
+
+
+class InvalidAttrTypeError(Exception):
+    """ Exception raised when the the input type of an attribute is invalid
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'Invalid attribute type!'

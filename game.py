@@ -3,8 +3,9 @@ import math
 import pygame
 from effect import *
 from particles import *
-from utilities import Positional, Movable, Collidable, Attackable, \
-    DynamicStats, Regenable
+from Creatures import NPC, Player
+from utilities import Positional, Movable, Collidable, Regenable, Staminaized, \
+    BufferedStats
 from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
 from settings import *
@@ -368,7 +369,7 @@ class Level:
                 player_input.append(event)
 
         # creature actions
-        for creature in Creature.creature_group:
+        for creature in Creature.creature_group.copy():
             Creature.creature_group[creature].action(player_input)
 
         # particle status update
@@ -388,12 +389,11 @@ class Level:
                         self._game_maps[particle.map_name].all_collision_boxs:
                     self._game_maps[
                         particle.map_name].all_collision_boxs.append(particle)
-            if isinstance(particle, Attackable) or isinstance(particle,
-                                                              CollisionBox):
+            if isinstance(particle, Staminaized):
                 particle.count()
-                if isinstance(particle, CollisionBox):
-                    particle.sync()
-
+            if isinstance(particle, CollisionBox):
+                CollisionBox.count(particle)
+                particle.sync()
             if isinstance(particle, Regenable):
                 particle.regen()
 
@@ -421,15 +421,16 @@ class Level:
         # reset buffer
         for particle in Particle.particle_group:
             particle = Particle.particle_group[particle]
-            if isinstance(particle, DynamicStats):
+            if isinstance(particle, BufferedStats):
                 particle.reset()
 
     def player_info_display(self, player: Player, screen: pygame.Surface):
         health_bar_width = 300
         health_bar_height = 12
         resource_bar_width = 200
+        resource_bar_height = 12
         stamina_bar_height = 12
-        stamina_bar_width = 150
+        stamina_bar_width = 250
 
         health_percent = player.health / player.max_health
         health_bar = pygame.Surface((health_percent * health_bar_width,
@@ -444,6 +445,13 @@ class Level:
         stamina_bar.fill((0, 255, 0))
         screen.blit(self.texts['stamina_bar'], (80, 100))
         screen.blit(stamina_bar, (80, 120))
+
+        mana_percent = player.mana / player.max_mana
+        mana_bar = pygame.Surface((mana_percent * resource_bar_width,
+                                    resource_bar_height))
+        mana_bar.fill((0, 255, 255))
+        screen.blit(self.texts['resource_bar'], (80, 140))
+        screen.blit(mana_bar, (80, 160))
 
     def exit(self):
         """
