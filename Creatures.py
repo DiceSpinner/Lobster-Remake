@@ -1,10 +1,10 @@
-from particle_actions import StandardAttacks
+from particle_actions import StandardAttacks, ProjectileThrowable
 from particles import Creature
 from typing import List, Tuple, Union, Optional
 import pygame
 
 
-class Player(StandardAttacks):
+class Player(StandardAttacks, ProjectileThrowable):
     """
     Description: Player class
 
@@ -71,8 +71,7 @@ class Player(StandardAttacks):
         if self.mouse_buttons[0] == 1:
             self.perform_act('basic_attack')
         if pygame.K_q in self.pressed_keys:
-            # self.perform_act('fireball')
-            pass
+            self.perform_act('fireball')
         self.update_position()
 
     def remove(self):

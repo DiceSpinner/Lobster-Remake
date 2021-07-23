@@ -209,10 +209,6 @@ class CollisionBox(CollidableParticle):
         Particle.remove(self)
         CollisionBox.collsion_box_group.pop(self.id, None)
 
-    def display(self, screen: pygame.Surface,
-                location: Tuple[int, int]) -> None:
-        screen.blit(self._texture, location)
-
 
 class DirectionalParticle(CollidableParticle, Directional):
     """ Collidable particles that implements the directional interface """
@@ -265,15 +261,6 @@ class MovableParticle(DirectionalParticle, Movable):
         c_y = int(self.y)
         if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
             return 0, 0, 0, 0, 0, 0
-        particles = []
-        for row in self._surrounding_tiles:
-            row = self._surrounding_tiles[row]
-            for p in row:
-                particles.append(row[p])
-        particles += self.get_adjacent_entities(True)
-        if self in particles:
-            particles.remove(self)
-
         if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
             return
         if self.get_stat('vx') == 0:
@@ -294,6 +281,31 @@ class MovableParticle(DirectionalParticle, Movable):
             x_time, y_time = 1, 1
         return x_d, y_d, c_x, c_y, x_time, y_time
 
+    def direction_increment(self, time: int, direction: str, total: float,
+                            current: int, particles: List[Collidable])\
+            -> Tuple[float, float]:
+        """ Increment the position of the particle in given direction """
+        vel = 'v' + direction
+        for i in range(time):
+            if total > 0:
+                if total >= 1:
+                    value = self.get_stat(vel) / abs(self.get_stat(vel))
+                    total -= 1
+                else:
+                    value = self.get_stat(vel) - int(self.get_stat(vel))
+                    total = 0
+                setattr(self, direction, getattr(self, direction) + value)
+                n = int(getattr(self, direction))
+                if abs(n - current) >= 1:
+                    for particle in particles:
+                        if particle.solid and self.solid \
+                                and self.detect_collision(particle):
+                            setattr(self, direction, getattr(self, direction) -
+                                    value)
+                            total = 0
+                            break
+        return total, current
+
     def update_position(self) -> None:
         particles = []
         for row in self._surrounding_tiles:
@@ -305,44 +317,10 @@ class MovableParticle(DirectionalParticle, Movable):
             particles.remove(self)
         x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
         while x_d > 0 or y_d > 0:
-            for i in range(x_time):
-                if x_d > 0:
-                    if x_d >= 1:
-                        value = self.get_stat('vx') / abs(self.get_stat('vx'))
-                        x_d -= 1
-                    else:
-                        value = self.get_stat('vx') - int(self.get_stat('vx'))
-                        x_d = 0
-                    self.x += value
-                    n_x = int(self.x)
-                    if abs(n_x - c_x) >= 1:
-                        for particle in particles:
-                            #  particles are guaranteed to implement the
-                            #  collidable interface
-                            if particle.solid and self.solid \
-                                    and self.detect_collision(particle):
-                                self.x -= value
-                                x_d = 0
-                                break
-            for i in range(y_time):
-                if y_d > 0:
-                    if y_d >= 1:
-                        value = self.get_stat('vy') / abs(self.get_stat('vy'))
-                        y_d -= 1
-                    else:
-                        value = self.get_stat('vy') - int(self.get_stat('vy'))
-                        y_d = 0
-                    self.y += value
-                    n_y = int(self.y)
-                    if abs(n_y - c_y) >= 1:
-                        for particle in particles:
-                            #  particles are guaranteed to implement the
-                            #  collidable interface
-                            if particle.solid and self.solid \
-                                    and self.detect_collision(particle):
-                                self.y -= value
-                                y_d = 0
-                                break
+            x_d, c_x = self.direction_increment(x_time, "x",
+                                                x_d, c_x, particles)
+            y_d, c_y = self.direction_increment(y_time, "y",
+                                                y_d, c_y, particles)
 
 
 class Creature(MovableParticle, Living, Lightable):
@@ -425,83 +403,6 @@ class Creature(MovableParticle, Living, Lightable):
     def remove(self):
         Particle.remove(self)
         Creature.creature_group.pop(self.id, None)
-
-
-class Fireball:
-    """ A projectile that damages nearby living particles on contact
-
-    === Public Attributes ===
-    - avoid
-    - dead
-    """
-    avoid: List[int]
-    dead: bool
-
-    def __init__(self, info: dict[str, Union[str, float, int, Tuple, List]]) \
-            -> None:
-        super().__init__(info)
-        self.avoid = info['avoid']
-        self.dead = False
-
-    def is_dead(self) -> bool:
-        return self.dead
-
-    def action(self, optional=None):
-        self.move(self.direction)
-        self.update_position()
-
-    def update_position(self) -> None:
-        x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
-        particles = []
-        for row in self._surrounding_tiles:
-            row = self._surrounding_tiles[row]
-            for p in row:
-                particles.append(row[p])
-        particles += self.get_adjacent_entities(True)
-        while x_d > 0 or y_d > 0:
-            for i in range(x_time):
-                if x_d > 0:
-                    if x_d >= 1:
-                        value = self.get_stat('vx') / abs(self.get_stat('vx'))
-                        x_d -= 1
-                    else:
-                        value = self.get_stat('vx') - int(self.get_stat('vx'))
-                        x_d = 0
-                    self.x += value
-                    n_x = int(self.x)
-                    if abs(n_x - c_x) >= 1:
-                        for particle in particles:
-                            #  particles are guaranteed to implement the
-                            #  collidable interface
-                            if isinstance(particle, Living) and particle.solid\
-                                 and not particle.id not in self.avoid \
-                                    and self.detect_collision(particle):
-                                self.basic_attack()
-                                x_d = 0
-                                y_d = 0
-                                break
-
-            for i in range(y_time):
-                if y_d > 0:
-                    if y_d >= 1:
-                        value = self.get_stat('vy') / abs(self.get_stat('vy'))
-                        y_d -= 1
-                    else:
-                        value = self.get_stat('vy') - int(self.get_stat('vy'))
-                        y_d = 0
-                    self.y += value
-                    n_y = int(self.y)
-                    if abs(n_y - c_y) >= 1:
-                        for particle in particles:
-                            #  particles are guaranteed to implement the
-                            #  collidable interface
-                            if isinstance(particle, Living) and particle.solid \
-                                    and not particle.id not in self.avoid \
-                                    and self.detect_collision(particle):
-                                self.basic_attack()
-                                x_d = 0
-                                y_d = 0
-                                break
 
 
 class Block(CollidableParticle, Lightable):

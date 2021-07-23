@@ -12,6 +12,9 @@ SQUARE = 'square'
 CIRCLE = 'circle'
 SHAPES = [SQUARE, CIRCLE]
 
+PLACE_HOLDER = 'self.'
+EMPTY_CONDITION = 'empty'
+
 # surrounding detection
 DEFAULT_DETECTION_RADIUS = 1
 
@@ -23,24 +26,25 @@ DEFAULT_PARTICLE_NAME = "particle"  # used while not reading data from map files
 # Living interface
 DEFAULT_HEALTH = 100
 DEFAULT_MAX_HEALTH = 100
-DEFAULT_HEALTH_REGEN = 0
+DEFAULT_HEALTH_REGEN = 10
 
 # Staminaized interface
-DEFAULT_STAMINA = 0
+DEFAULT_STAMINA = 100
 DEFAULT_MAX_STAMINA = 100
 DEFAULT_STAMINA_REGEN = 25
 
 # Manaized interface
-DEFAULT_MANA = 0
+DEFAULT_MANA = 100
 DEFAULT_MAX_MANA = 100
-DEFAULT_MANA_REGEN = 10
+DEFAULT_MANA_REGEN = 0
 
-# Attackable interface
+# StandardAttacks interface
 DEFAULT_ATTACK_DAMAGE = 40
 DEFAULT_ATTACK_RANGE = TILE_SIZE // 2
 DEFAULT_ATTACK_SPEED = 1  # attacks per sec
 DEFAULT_ATTACK_STAMINA_COST = 45  # stamina consumed per attack
-DEFAULT_ATTACK_MANA_COST = 10
+DEFAULT_ATTACK_MANA_COST = 0
+DEFAULT_TARGET = "( not id = self.id )"
 
 # SpellCastable interface
 DEFAULT_ABILITY_POWER = 30

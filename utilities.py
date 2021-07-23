@@ -427,8 +427,8 @@ class Staminaized(Regenable):
     max_stamina: float
     stamina_costs: dict[str, float]
     actions: dict[str, Callable]
-    action_cooldown: {}
-    _cooldown_counter: {}
+    action_cooldown: dict[str, float]
+    _cooldown_counter: dict[str, float]
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
         attr = ['stamina', 'max_stamina']

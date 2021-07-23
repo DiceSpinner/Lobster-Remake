@@ -6,12 +6,20 @@ class EmptyStackError(Exception):
         return 'Called pop on an empty stack.'
 
 
-class IllegalConditionalOperatorError(Exception):
-    """Exception raised when the input condition operator is illegal."""
+class CollidedParticleNameError(Exception):
+    """Exception raised when name collision of predefined particles occurs."""
 
     def __str__(self) -> str:
         """ Return a string representation of this error. """
-        return 'Illegal conditional operator!'
+        return 'Predefined particle name collision!'
+
+
+class IllegalOperatorError(Exception):
+    """Exception raised when the input operator is illegal."""
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'Illegal operator!'
 
 
 class NoneConditionError(Exception):
@@ -23,6 +31,15 @@ class NoneConditionError(Exception):
         """ Return a string representation of this error. """
         return 'The input condition must not be None when the root is' \
                'not an operator!'
+
+
+class UnsubstitutedConditionError(Exception):
+    """Exception raised when the condition is not substituted.
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'The condition must be substituted before evaluated'
 
 
 class EffectSubjectError(Exception):

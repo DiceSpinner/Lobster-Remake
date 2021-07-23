@@ -10,8 +10,7 @@ from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
 from settings import *
 from data_structures import PriorityQueue
-from math_formula import segment_intersection, line_circle_intersection, \
-    point_vec_left, point_vec_right, point_on_segment
+from error import CollidedParticleNameError
 import os
 
 
@@ -72,7 +71,7 @@ class GameMap:
                         pre_p.info['y'] = pos_y
                         pre_p.info['map_name'] = self.name
                         particle_class = globals()[pre_p.info['class']]
-                        par = particle_class(pre_p.info)
+                        par = particle_class(pre_p.info.copy())
                         if isinstance(par, Block):
                             self.blocks[i].append(par)
                             self.all_blocks.append(par)
@@ -277,17 +276,19 @@ class Camera(Positional):
 class Level:
     """
     Description: Levels of the game
+
     === Public Attributes ===
     difficulty: difficulty of the level
     goal: The goal of the level
     running: Whether this level is running
+
     === Private Attributes ===
-    _asset: Loaded assets of the game
-    _asset_name: The locations of game assets
     _game_maps: Loaded game maps, accessed by their names
     _map_names: Name of the maps
+    _particle_names: Names of the file that stores predefined particles info
     _camera: Camera for this level
     _initialized: Whether the level has been initialized
+
     === Representation Invariants ===
     - difficulty must be an integer from 0 - 3
     """
@@ -296,16 +297,21 @@ class Level:
     _game_maps: dict[str, GameMap]
     _camera: Camera
     _map_names: List[str]
+    _particle_names: List[str]
     _initialized: bool
     running: bool
     fonts: dict[str, pygame.font.Font]
     texts: dict[str, pygame.Surface]
 
     def __init__(self, asset: List[str]) -> None:
+        self._map_names = []
+        self._particle_names = []
         for line in asset:
-            line = line.split('=')
+            line = line.rstrip().split('=')
             if line[0] == 'maps':
                 self._map_names = line[1].split(':')
+            elif line[0] == 'pre_particles':
+                self._particle_names.append(line[1])
         self.difficulty = 0  # default difficulty
         self._initialized = False
         self._game_maps = {}
@@ -316,10 +322,15 @@ class Level:
     def _load_maps(self) -> None:
         # load in predefined particles
         look_up = {}
-        with open('predefined-particles.txt', 'r') as file:
-            for line in file:
-                p = PredefinedParticle(line)
-                look_up[p.info['name']] = p
+        for name in self._particle_names:
+            path = os.path.join("Predefined Particles", name)
+            particles = os.listdir(path)
+            for particle in particles:
+                pre_p = PredefinedParticle(os.path.join(path, particle))
+                if pre_p.info['name'] not in look_up:
+                    look_up[pre_p.info['name']] = pre_p
+                else:
+                    raise CollidedParticleNameError
 
         for m in self._map_names:
             name = os.path.join("assets/maps", m + ".txt")

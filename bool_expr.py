@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Union, List, Optional, Dict, Any, Tuple
 from data_structures import Queue
-from error import IllegalConditionalOperatorError, NoneConditionError, \
-    MainConnectiveError
+from error import IllegalOperatorError, NoneConditionError, \
+    MainConnectiveError, UnsubstitutedConditionError
+from settings import *
 
 OP_AND = 'and'
 OP_OR = 'or'
@@ -22,7 +23,6 @@ class BoolExpr:
     _subtrees: The list of all subtrees of this BoolExpr.
 
     === Representation Invariants ===
-    - _operator Can either be any string or one of the operators defined above
     - len(_subtrees) == 0 when _operator is not an operator defined above
     - len(_subtrees) == 1 when _operator is OP_NOT
     - len(_subtrees) >= 2 when _operator is OP_AND or OP_OR
@@ -30,10 +30,12 @@ class BoolExpr:
     - _condition can only contain one of '<', '=', '>'.
     - When _root == 'empty', this BoolExpr is empty and will always be
         evaluated True
+    - _condition can contain place holder strings for external value
+        substitution
     """
     _root: Optional[str]
     _subtrees: List[BoolExpr]
-    _condition: Union[Tuple[str, Union[int, float]], bool, str]
+    _condition: Union[Tuple[str, Union[int, float, str]], bool, str]
 
     def __init__(self, root: str, subtrees: List[BoolExpr],
                  condition: Optional[Union[bool, Tuple[str, str]]]):
@@ -43,17 +45,18 @@ class BoolExpr:
         """
         self._root = root
         self._subtrees = subtrees[:]
-        if root not in OPERATORS and not root == 'empty':
+        if root not in OPERATORS and not root == EMPTY_CONDITION:
             if not isinstance(condition, bool):
                 if condition is None:
                     raise NoneConditionError
                 if condition[0] not in ['>', '=', '<']:
-                    raise IllegalConditionalOperatorError
+                    raise IllegalOperatorError
                 value = condition[1]
-                if '.' in value:
-                    value = float(value)
-                else:
-                    value = int(value)
+                if value.isnumeric():
+                    if '.' in value:
+                        value = float(value)
+                    else:
+                        value = int(value)
                 self._condition = (condition[0], value)
             else:
                 self._condition = condition
@@ -82,8 +85,8 @@ class BoolExpr:
         >>> print(r7)
         ( not vision = 6 )
         """
-        if self._root == 'empty':
-            return 'empty'
+        if self._root == EMPTY_CONDITION:
+            return EMPTY_CONDITION
         if self._root not in OPERATORS:
             if isinstance(self._condition, bool):
                 return self._root + ' = ' + str(self._condition)
@@ -97,6 +100,39 @@ class BoolExpr:
                     s += ' ' + self._root + ' '
             return '( ' + s + ' )'
         return '( not ' + self._subtrees[0].__str__() + ' )'
+
+    def substitute(self, info: dict[str, Union[str, int, float, bool]]) -> None:
+        """ Replace placeholder values with values from external objects
+
+        >>> s = "( health > self.health or speed > self.speed )"
+        >>> b1 = construct_from_str(s)
+        >>> print(b1)
+        ( health > self.health or speed > self.speed )
+        >>> inf = {'speed': 10}
+        >>> b1.substitute(inf)
+        >>> print(b1)
+        ( health > self.health or speed > 10 )
+        >>> inf['health'] = 5
+        >>> b1.substitute(inf)
+        >>> print(b1)
+        ( health > 5 or speed > 10 )
+        """
+        if self._root not in OPERATORS:
+            if isinstance(self._condition, bool):
+                return
+            if isinstance(self._condition, str):
+                items = self._condition.split(".")
+                if len(items) == 2 and PLACE_HOLDER == items[0]:
+                    if items[1] in info:
+                        self._condition = info[items[1]]
+                return
+            if isinstance(self._condition[1], str):
+                item = self._condition[1].split(".")[1]
+                if item in info:
+                    self._condition = self._condition[0], info[item]
+        else:
+            for subtree in self._subtrees:
+                subtree.substitute(info)
 
     def eval(self, info: dict[str, Union[str, int, float, bool]]) -> bool:
         """
@@ -124,16 +160,19 @@ class BoolExpr:
         >>> r3.eval(ct)
         False
         """
-        if self._root == 'empty':
+        if self._root == EMPTY_CONDITION:
             return True
         if self._root not in OPERATORS:
             if self._root in info:
-                if self._condition == 'exist':
-                    return True
-                elif isinstance(self._condition, bool):
+                if isinstance(self._condition, bool):
                     if not self._condition:
                         return not info[self._root]
                     return info[self._root]
+                elif isinstance(self._condition, str):
+                    return self._condition == EMPTY_CONDITION
+                elif isinstance(self._condition[1], str) and \
+                        PLACE_HOLDER in self._condition[1]:
+                    raise UnsubstitutedConditionError
                 elif self._condition[0] == '<':
                     return info[self._root] < self._condition[1]
                 elif self._condition[0] == '>':

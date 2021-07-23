@@ -1,6 +1,9 @@
+import pygame
+
 from particles import Creature, CollisionBox
 from utilities import OffensiveStats, Living, Manaized, Staminaized
-from typing import Union
+from bool_expr import BoolExpr, construct_from_str
+from typing import Union, Tuple, List
 from settings import *
 
 
@@ -12,16 +15,23 @@ class StandardAttacks(Creature, OffensiveStats, Manaized):
     === Public Attributes ===
     - attack_range: The range of basic attacks
     - attack_speed: The number of basic attacks can be performed in a second
+    - target: A bool expression that gives info about target
+    - attack_texture: The texture of attacks
 
     === Private Attributes ===
     - _attack_counter: The counter for basic attack cooldown
     """
+    attack_range: int
+    attack_speed: float
+    attack_texture: dict[str, pygame.Surface]
+    target: BoolExpr
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
-        attr = ['attack_speed', 'attack_range']
+        attr = ['attack_speed', 'attack_range', 'target']
         default = {
             'attack_speed': DEFAULT_ATTACK_SPEED,
             'attack_range': DEFAULT_ATTACK_RANGE,
+            'target': construct_from_str(DEFAULT_TARGET)
         }
         for key in default:
             if key not in info:
@@ -29,6 +39,8 @@ class StandardAttacks(Creature, OffensiveStats, Manaized):
         for a in attr:
             setattr(self, a, info[a])
         super().__init__(info)
+        self.target.substitute(vars(self))
+
         self._attack_counter = 0
         moves = [
             {
@@ -63,7 +75,7 @@ class StandardAttacks(Creature, OffensiveStats, Manaized):
         info = {
             'diameter': self.get_stat('attack_range') * 2 + 1,
             'shape': self.shape,
-            'texture': 'attack_circle_64.png',
+            'texture': 'attack_circle.png',
             'owner': self,
             'x': c2x,
             'y': c2y,
@@ -71,11 +83,70 @@ class StandardAttacks(Creature, OffensiveStats, Manaized):
         }
         collision_box = CollisionBox(info)
         for entity in self.get_adjacent_entities(True):
-            if not entity.id == self.id and isinstance(entity, Living):
+            if isinstance(entity, Creature) and self._is_target(entity):
                 if collision_box.detect_collision(entity):
                     entity.health -= self.get_stat('attack_power')
         self._attack_counter = 0
         return True
+
+    def _is_target(self, particle: Creature) -> bool:
+        return self.target.eval(vars(particle))
+
+
+class Projectile(StandardAttacks):
+    """ A projectile that damages nearby living particles on contact
+
+    === Public Attributes ===
+    - avoid
+    - dead
+    """
+    avoid: List[int]
+    dead: bool
+
+    def __init__(self, info: dict[str, Union[str, float, int, Tuple, List]]) \
+            -> None:
+        super().__init__(info)
+        self.avoid = info['avoid']
+        self.dead = False
+
+    def is_dead(self) -> bool:
+        return self.dead
+
+    def action(self, optional=None):
+        self.move(self.direction)
+        self.update_position()
+
+
+class ProjectileThrowable(Creature, OffensiveStats, Manaized):
+    """
+    """
+    target: BoolExpr
+    explosion_diameter: int
+
+    def __init__(self, info: dict[str, Union[str, float, int, BoolExpr]]) -> \
+            None:
+        attr = ['target']
+        default = {
+            'target': construct_from_str(DEFAULT_TARGET)
+        }
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+        for a in attr:
+            setattr(self, a, info[a])
+        super().__init__(info)
+        self.target.substitute(vars(self))
+
+        moves = [
+            {
+                'name': 'fireball',
+                'stamina_cost': DEFAULT_ABILITY_STAMINA_COST,
+                'mana_cost': DEFAULT_ABILITY_MANA_COST,
+                'cooldown': DEFAULT_ABILITY_COOLDOWN
+            }
+        ]
+        for move in moves:
+            self.add_movement(move)
 
     def fireball(self):
         """ Damage every nearby creatures inside the explosion range of
@@ -90,7 +161,7 @@ class StandardAttacks(Creature, OffensiveStats, Manaized):
             'diameter': exd,
             'shape': self.shape,
             'texture': 'fireball.png',
-            'avoid': [self.id],
+            'target': self.target,
             'attack_damage': self.ability_power,
             'speed': DEFAULT_PROJECTILE_SPEED,
             'direction': self.direction,
@@ -98,4 +169,4 @@ class StandardAttacks(Creature, OffensiveStats, Manaized):
             'y': c2y,
             'map_name': self.map_name
         }
-        # Fireball(info)
+        Projectile(info)
