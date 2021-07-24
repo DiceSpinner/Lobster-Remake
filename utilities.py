@@ -126,10 +126,11 @@ class Movable(Positional, BufferedStats):
             direction = get_direction((self.x, self.y), (direction.x,
                                                          direction.y))
         direction = math.radians(direction)
+        speed = self.get_stat('speed') / FPS
         self.add_stats(
-            {'vx': self.get_stat('speed') * round(math.cos(direction), 2)})
+            {'vx': speed * round(math.cos(direction), 2)})
         self.add_stats(
-            {'vy': - self.get_stat('speed') * round(math.sin(direction), 2)})
+            {'vy': - speed * round(math.sin(direction), 2)})
 
 
 class Directional(Positional):
@@ -418,6 +419,7 @@ class Staminaized(Regenable):
     - actions: The collection of all actions this unit can perform
     - action_cooldown: The collection of the cooldowns of the actions of
         this unit
+    - action_textures: Names of assets of Visual Displays of actions
 
     === Private Attributes ===
     - _cooldown_counter: The collection of the counter of the cooldowns of the
@@ -428,6 +430,7 @@ class Staminaized(Regenable):
     stamina_costs: dict[str, float]
     actions: dict[str, Callable]
     action_cooldown: dict[str, float]
+    action_textures: dict[str, str]
     _cooldown_counter: dict[str, float]
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
@@ -440,6 +443,7 @@ class Staminaized(Regenable):
         self.actions = {}
         self.stamina_costs = {}
         self.action_cooldown = {}
+        self.action_textures = {}
         self._cooldown_counter = {}
         for key in default:
             if key not in info:
@@ -473,8 +477,9 @@ class Staminaized(Regenable):
         """ Execute the given action """
         if self.can_act(name):
             # consume resource if successfully executed movements
-            if self.actions[name](*args):
-                self.resource_consume(name)
+            self.actions[name](*args)
+            self.resource_consume(name)
+            self._cooldown_counter[name] = 0
 
     def resource_consume(self, name: str):
         """ Consume the resource for performing this action """
@@ -487,11 +492,16 @@ class Staminaized(Regenable):
             1. name of the action accessed by "name"
             2. stamina cost of the action accessed by "stamina_cost"
             3. cooldown of the action accessed by "cooldown"
+
+        Optional:
+            1. Texture of the action accessed by "texture"
         """
         self.actions[info['name']] = getattr(self, info['name'])
         self.stamina_costs[info['name']] = info['stamina_cost']
         self.action_cooldown[info['name']] = info['cooldown']
         self._cooldown_counter[info['name']] = 0
+        if 'texture' in info:
+            self.action_textures[info['name']] = info['texture']
 
 
 class Manaized(Staminaized):
@@ -542,6 +552,9 @@ class Manaized(Staminaized):
             2. stamina cost of the action accessed by "stamina_cost"
             3. mana cost of the action accessed by "mana_cost"
             4. cooldown of the action accessed by "cooldown"
+
+        Optional:
+            1. Texture of the action accessed by "texture"
         """
         Staminaized.add_movement(self, info)
         self.mana_costs[info['name']] = info['mana_cost']

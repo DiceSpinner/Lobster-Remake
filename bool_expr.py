@@ -5,11 +5,14 @@ from data_structures import Queue
 from error import IllegalOperatorError, NoneConditionError, \
     MainConnectiveError, UnsubstitutedConditionError
 from settings import *
+import sys
 
 OP_AND = 'and'
 OP_OR = 'or'
 OP_NOT = 'not'
 OPERATORS = [OP_AND, OP_OR, OP_NOT]
+
+IS_INSTANCE = '->'
 
 
 class BoolExpr:
@@ -49,7 +52,7 @@ class BoolExpr:
             if not isinstance(condition, bool):
                 if condition is None:
                     raise NoneConditionError
-                if condition[0] not in ['>', '=', '<']:
+                if condition[0] not in ['>', '=', '<', IS_INSTANCE]:
                     raise IllegalOperatorError
                 value = condition[1]
                 if value.isnumeric():
@@ -120,16 +123,11 @@ class BoolExpr:
         if self._root not in OPERATORS:
             if isinstance(self._condition, bool):
                 return
-            if isinstance(self._condition, str):
-                items = self._condition.split(".")
-                if len(items) == 2 and PLACE_HOLDER == items[0]:
-                    if items[1] in info:
-                        self._condition = info[items[1]]
-                return
             if isinstance(self._condition[1], str):
-                item = self._condition[1].split(".")[1]
-                if item in info:
-                    self._condition = self._condition[0], info[item]
+                if PLACE_HOLDER in self._condition[1]:
+                    item = self._condition[1].split(".")[1]
+                    if item in info:
+                        self._condition = self._condition[0], info[item]
         else:
             for subtree in self._subtrees:
                 subtree.substitute(info)
@@ -179,6 +177,10 @@ class BoolExpr:
                     return info[self._root] > self._condition[1]
                 elif self._condition[0] == '=':
                     return info[self._root] == self._condition[1]
+                elif self._condition[0] == IS_INSTANCE:
+                    data = self._condition[1].split('.')
+                    class_name = getattr(sys.modules[data[0]], data[1])
+                    return isinstance(info[self._root], class_name)
             return False
         if self._root == OP_NOT:
             return not self._subtrees[0].eval(info)
