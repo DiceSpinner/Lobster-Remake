@@ -1,0 +1,7 @@
+W
+Block
+diameter~const_int~TILE_SIZE
+solid~bool~True
+shape~str~square
+light_resistance~int~256
+texture~str~W_64.png

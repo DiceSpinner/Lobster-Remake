@@ -1,0 +1,6 @@
+P
+Block
+diameter~const_int~TILE_SIZE
+shape~str~square
+light_resistance~int~50
+texture~str~P_64.png

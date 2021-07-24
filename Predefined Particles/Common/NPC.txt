@@ -1,0 +1,9 @@
+N
+NPC
+diameter~const_int~TILE_SIZE - 36
+shape~str~circle
+attack_range~const_int~TILE_SIZE / 1.5
+solid~bool~True
+texture~str~Lobster_64_0.png
+death~BoolExpr~( not health > 0 )
+color~tuple~(0,255,255)

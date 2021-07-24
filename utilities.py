@@ -1,13 +1,14 @@
 from __future__ import annotations
 from typing import Union, List, Optional, Any, Tuple, Callable
-from error import UnknownShapeError, UnknownStaminaCostError
+from error import UnknownShapeError, UnknownStaminaCostError, \
+    UnknownManaCostError, UnknownCooldownError, InvalidAttrTypeError
 from bool_expr import BoolExpr, construct_from_list, construct_from_str
 from settings import *
 import math
 
 
-class DynamicStats:
-    """ Objects with dynamic stats.
+class BufferedStats:
+    """ Objects with buffered stats.
     i.e The actual attack damage the player can deal is the sum of his
     base attack damage and attack bonus from item/effect. This can change
     dynamically when the player loses/gain item/effect.
@@ -17,7 +18,7 @@ class DynamicStats:
     """
     _buffer_stats: dict[str, Any]
 
-    def __init__(self) -> None:
+    def __init__(self, place_holder: Optional[Any]) -> None:
         """ Initialize a set of additional attributes """
         self._buffer_stats = {}
 
@@ -27,19 +28,27 @@ class DynamicStats:
             if hasattr(self, data):
                 if data not in self._buffer_stats:
                     self._buffer_stats[data] = info[data]
-                elif not isinstance(info[data], int) and not isinstance(
-                        info[data], float):
+                elif isinstance(self._buffer_stats[data], dict) and \
+                        isinstance(info[data], dict):
+                    dict_merge(self._buffer_stats[data], info[data])
+                elif isinstance(self._buffer_stats[data], str) and \
+                        isinstance(info[data], str):
                     self._buffer_stats[data] = info[data]
-                else:
+                elif is_numeric(self._buffer_stats[data]) and \
+                        is_numeric(info[data]):
                     self._buffer_stats[data] += info[data]
+                else:
+                    raise InvalidAttrTypeError
 
     def get_stat(self, item: str) -> Any:
         if item in self._buffer_stats:
-            if not isinstance(getattr(self, item), int) and not isinstance(
-                    getattr(self, item), float):
-                return self._buffer_stats[item]
-            else:
-                return getattr(self, item) + self._buffer_stats[item]
+            v1 = getattr(self, item)
+            v2 = self._buffer_stats[item]
+            if not is_numeric(v1) and not is_numeric(v2):
+                return v2
+            elif is_numeric(v1) and is_numeric(v2):
+                return v1 + v2
+            raise InvalidAttrTypeError
         else:
             return getattr(self, item)
 
@@ -47,7 +56,7 @@ class DynamicStats:
         self._buffer_stats = {}
 
 
-class Positional:
+class Positional(BufferedStats):
     """ An interface that provides positional attributes
 
     === Public Attributes ===
@@ -60,8 +69,6 @@ class Positional:
     y: float
 
     def __init__(self, info: dict[str, Union[str, int]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         attr = ['x', 'y', 'map_name']
         for item in attr:
             if item not in info:
@@ -69,9 +76,10 @@ class Positional:
         for item in info:
             if item in attr:
                 setattr(self, item, info[item])
+        super().__init__(info)
 
 
-class Movable(Positional, DynamicStats):
+class Movable(Positional, BufferedStats):
     """ An interface that provides movement methods in addition to positional
         attributes.
 
@@ -89,9 +97,7 @@ class Movable(Positional, DynamicStats):
     speed: float
 
     def __init__(self, info: dict[str, Union[str, float]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
-        Positional.__init__(self, info)
+        super().__init__(info)
         attr = ['vx', 'vy', 'ax', 'ay', 'speed']
         default = {
             'vx': 0,
@@ -108,24 +114,23 @@ class Movable(Positional, DynamicStats):
             if item in attr:
                 setattr(self, item, info[item])
 
-        DynamicStats.__init__(self)
-
     def update_position(self) -> None:
         """
         Update the object's position.
         """
         raise NotImplementedError
 
-    def move(self, direction: Union[int, Positional]) -> None:
+    def move(self, direction: Union[float, Positional]) -> None:
         """ Move towards the target direction or object """
         if isinstance(direction, Positional):
             direction = get_direction((self.x, self.y), (direction.x,
                                                          direction.y))
         direction = math.radians(direction)
+        speed = self.get_stat('speed') / FPS
         self.add_stats(
-            {'vx': self.get_stat('speed') * round(math.cos(direction), 2)})
+            {'vx': speed * round(math.cos(direction), 2)})
         self.add_stats(
-            {'vy': - self.get_stat('speed') * round(math.sin(direction), 2)})
+            {'vy': - speed * round(math.sin(direction), 2)})
 
 
 class Directional(Positional):
@@ -143,9 +148,7 @@ class Directional(Positional):
     direction: float
 
     def __init__(self, info: dict[str, Union[str, float]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
-        Positional.__init__(self, info)
+        super().__init__(info)
         attr = ['direction']
         default = {
             'direction': 0
@@ -165,7 +168,7 @@ class Directional(Positional):
         self.direction = direction
 
 
-class Collidable(Positional, DynamicStats):
+class Collidable(Positional, BufferedStats):
     """ Description: Collision interface supports square and circle
     shaped objects
 
@@ -180,9 +183,7 @@ class Collidable(Positional, DynamicStats):
     solid: bool
 
     def __init__(self, info: dict[str, Union[int, str]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
-        Positional.__init__(self, info)
+        super().__init__(info)
         attr = ['diameter', 'shape', 'solid']
         default = {
             'diameter': 30,
@@ -195,7 +196,6 @@ class Collidable(Positional, DynamicStats):
                 info[key] = default[key]
         for a in attr:
             setattr(self, a, info[a])
-        DynamicStats.__init__(self)
 
     def detect_collision(self, other: Collidable) -> bool:
         if other.diameter == 0 or self.diameter == 0:
@@ -272,7 +272,7 @@ class Collidable(Positional, DynamicStats):
         return other._square_circle(self)
 
 
-class Lightable(DynamicStats):
+class Lightable(BufferedStats):
     """ Description: Light interface
 
     === Public Attributes ===
@@ -290,8 +290,6 @@ class Lightable(DynamicStats):
     light_resistance: int
 
     def __init__(self, info: dict[str, Union[int, str]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         attr = ['brightness', 'light_source', 'light_resistance']
         default = {
             'brightness': 0,
@@ -303,7 +301,7 @@ class Lightable(DynamicStats):
                 info[key] = default[key]
         for a in attr:
             setattr(self, a, info[a])
-        DynamicStats.__init__(self)
+        super().__init__(info)
 
     def enlighten(self, other: Lightable) -> None:
         """ Raise self and other lightable object's brightness """
@@ -319,7 +317,7 @@ class Lightable(DynamicStats):
                                            other.get_stat('brightness')})
 
 
-class Regenable(DynamicStats):
+class Regenable(BufferedStats):
     """ Description: Interface that provides access to resource regeneration
 
     === Public Attributes ===
@@ -338,9 +336,7 @@ class Regenable(DynamicStats):
     stats_max: List[str]
 
     def __init__(self, info: dict[str, Union[int, float, str, List]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
-        DynamicStats.__init__(self)
+        super().__init__(info)
         self.regen_stats = []
         self.stats_max = []
         for item in info:
@@ -361,8 +357,9 @@ class Regenable(DynamicStats):
                 result = value + getattr(self, r)
                 max_stat = "max_" + r
                 if max_stat in self.stats_max:
-                    if result > getattr(self, max_stat):
-                        setattr(self, r, getattr(self, max_stat))
+                    max_value = self.get_stat(max_stat)
+                    if result > max_value:
+                        setattr(self, r, max_value)
                     else:
                         setattr(self, r, result)
                 else:
@@ -371,7 +368,7 @@ class Regenable(DynamicStats):
                 self.regen_stats.remove(r)
 
 
-class Living(DynamicStats):
+class Living(Regenable):
     """ Description: Interface for living objects
 
     === Public Attributes ===
@@ -384,11 +381,10 @@ class Living(DynamicStats):
     death: BoolExpr
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         attr = ['health', 'max_health', 'death']
         default = {
             'health': DEFAULT_HEALTH,
+            'health_regen': DEFAULT_HEALTH_REGEN,
             'max_health': DEFAULT_MAX_HEALTH,
             'death': construct_from_str("( not health > 0 )")
         }
@@ -397,7 +393,7 @@ class Living(DynamicStats):
                 info[key] = default[key]
         for a in attr:
             setattr(self, a, info[a])
-        DynamicStats.__init__(self)
+        super().__init__(info)
 
     def calculate_health(self) -> None:
         """ Update health with value changes in the buffer """
@@ -419,15 +415,25 @@ class Staminaized(Regenable):
     === Public Attributes ===
     - stamina: The required stats to perform advanced movements
     - max_stamina: The maximum amount of stamina this unit can have
+    - stamina_costs: The collection of the cost of all staminaized actions
+    - actions: The collection of all actions this unit can perform
+    - action_cooldown: The collection of the cooldowns of the actions of
+        this unit
+    - action_textures: Names of assets of Visual Displays of actions
+
+    === Private Attributes ===
+    - _cooldown_counter: The collection of the counter of the cooldowns of the
+        spells of this unit
     """
     stamina: float
     max_stamina: float
     stamina_costs: dict[str, float]
     actions: dict[str, Callable]
+    action_cooldown: dict[str, float]
+    action_textures: dict[str, str]
+    _cooldown_counter: dict[str, float]
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         attr = ['stamina', 'max_stamina']
         default = {
             'stamina': DEFAULT_STAMINA,
@@ -436,84 +442,148 @@ class Staminaized(Regenable):
         }
         self.actions = {}
         self.stamina_costs = {}
+        self.action_cooldown = {}
+        self.action_textures = {}
+        self._cooldown_counter = {}
         for key in default:
             if key not in info:
                 info[key] = default[key]
         for a in attr:
             setattr(self, a, info[a])
-        Regenable.__init__(self, info)
+        super().__init__(info)
 
     def can_act(self, name: str) -> bool:
         """ Return whether the given action can be performed """
         if name in self.actions:
+            # Check if the action is on cooldown
+            if name in self.action_cooldown:
+                if self._cooldown_counter[name] < self.action_cooldown[name] * \
+                        FPS:
+                    return False
+            # Stamina check
             if name in self.stamina_costs:
                 return self.stamina >= self.stamina_costs[name]
             raise UnknownStaminaCostError
         return False
 
+    def count(self) -> None:
+        """ Increase the cooldown counter by 1 per frame. """
+        for counter in self.action_cooldown:
+            value = self.action_cooldown[counter] * FPS
+            if self._cooldown_counter[counter] < value:
+                self._cooldown_counter[counter] += 1
+
     def perform_act(self, name: str, *args: Optional) -> None:
         """ Execute the given action """
         if self.can_act(name):
-            # consume stamina if successfully executed movements
-            if self.actions[name](*args):
-                self.stamina -= self.stamina_costs[name]
+            # consume resource if successfully executed movements
+            self.actions[name](*args)
+            self.resource_consume(name)
+            self._cooldown_counter[name] = 0
 
-    def add_movement(self, name: str, cost: float) -> None:
-        """ Add movement methods to this object """
-        self.actions[name] = getattr(self, name)
-        self.stamina_costs[name] = cost
+    def resource_consume(self, name: str):
+        """ Consume the resource for performing this action """
+        self.stamina -= self.stamina_costs[name]
+
+    def add_movement(self, info: dict[str, Union[str, float, int]]) -> None:
+        """ Add movement methods to this object
+
+        Pre-condition: info contains all of the following
+            1. name of the action accessed by "name"
+            2. stamina cost of the action accessed by "stamina_cost"
+            3. cooldown of the action accessed by "cooldown"
+
+        Optional:
+            1. Texture of the action accessed by "texture"
+        """
+        self.actions[info['name']] = getattr(self, info['name'])
+        self.stamina_costs[info['name']] = info['stamina_cost']
+        self.action_cooldown[info['name']] = info['cooldown']
+        self._cooldown_counter[info['name']] = 0
+        if 'texture' in info:
+            self.action_textures[info['name']] = info['texture']
 
 
-class Attackable(Staminaized):
-    """ Attacking Interface that provides offensive movements
+class Manaized(Staminaized):
+    """ Interface that provides access to movements that depletes resource bar
+
+    === Public Attributes ===
+    - mana: The required stats to perform manaized movements
+    - max_mana: The maximum amount of mana this unit can have
+    - mana_costs: The collection of the cost of all staminaized actions
+    """
+    mana: float
+    max_mana: float
+    mana_costs: dict[str, float]
+
+    def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
+        attr = ['mana', 'max_mana']
+        default = {
+            'mana': DEFAULT_MANA,
+            'max_mana': DEFAULT_MAX_MANA,
+            'mana_regen': DEFAULT_MANA_REGEN
+        }
+        self.mana_costs = {}
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+        for a in attr:
+            setattr(self, a, info[a])
+        super().__init__(info)
+
+    def can_act(self, name: str) -> bool:
+        """ Return whether the given action can be performed """
+        if Staminaized.can_act(self, name):
+            if name in self.mana_costs:
+                return self.mana >= self.mana_costs[name]
+            raise UnknownManaCostError
+        return False
+
+    def resource_consume(self, name: str):
+        """ Consume the resource for performing this action """
+        Staminaized.resource_consume(self, name)
+        self.mana -= self.mana_costs[name]
+
+    def add_movement(self, info: dict[str, Union[str, float, int]]) -> None:
+        """ Add movement methods to this object
+
+        Pre-condition: info contains all of the following
+            1. name of the action accessed by "name"
+            2. stamina cost of the action accessed by "stamina_cost"
+            3. mana cost of the action accessed by "mana_cost"
+            4. cooldown of the action accessed by "cooldown"
+
+        Optional:
+            1. Texture of the action accessed by "texture"
+        """
+        Staminaized.add_movement(self, info)
+        self.mana_costs[info['name']] = info['mana_cost']
+
+
+class OffensiveStats:
+    """ Interface that provides offensive stats
 
     === Public Attributes ===
     - attack_power: The strength of the attack
-    - attack_speed: Number of frames between each attacks
-    - attack_range: The range of the attack
-
-    === Private Attributes ===
-    - attack_counter: Time counter for attacks
+    - ability_power: Scaling factor for ability strength
     """
 
     attack_power: float
-    attack_speed: int
-    attack_range: int
-    _attack_counter: int
+    ability_power: float
 
     def __init__(self, info: dict[str, Union[int, float]]) -> None:
-        if called(self.__class__.__name__, info):
-            return
         self._attack_counter = 0
-        attr = ['attack_power', 'attack_speed', 'attack_range']
+        attr = ['attack_power', 'ability_power']
         default = {
             'attack_power': DEFAULT_ATTACK_DAMAGE,
-            'attack_speed': DEFAULT_ATTACK_SPEED,
-            'attack_range': DEFAULT_ATTACK_RANGE,
-            '_attack_counter': 0
+            'ability_power': DEFAULT_ABILITY_POWER
         }
         for key in default:
             if key not in info:
                 info[key] = default[key]
         for a in attr:
             setattr(self, a, info[a])
-        Staminaized.__init__(self, info)
-        self.add_movement("basic_attack", DEFAULT_BASIC_ATTACK_COST)
-
-    def count(self) -> None:
-        """ Increase the attack counter by 1 each frame. """
-        if not self.can_attack():
-            self._attack_counter += 1
-
-    def can_attack(self) -> bool:
-        return self._attack_counter >= (FPS // self.get_stat('attack_speed'))
-
-    def basic_attack(self, targets: Optional[List[Living]]) -> bool:
-        """ Perform an attack and reset the attack counter
-
-        Return True if executed successfully
-        """
-        raise NotImplementedError
+        super().__init__(info)
 
 
 def get_direction(obj1: Tuple[float, float], obj2: Tuple[float, float]) \
@@ -561,12 +631,18 @@ def get_direction(obj1: Tuple[float, float], obj2: Tuple[float, float]) \
             value += 360
     return round(value, 1)
 
+def is_numeric(item: Any) -> bool:
+    """ Return whether this item is numeric """
+    return isinstance(item, int) or isinstance(item, float)
 
-def called(name: str, info: dict[Any]) -> bool:
-    if "called" in info:
-        if isinstance(info['called'], List):
-            if name in info['called']:
-                return True
-        info['called'] = [name]
-        return False
-    return False
+def dict_merge(d1: dict[str, Any], d2:dict[str, Any]):
+    """ Import stats from d2 and merge them inside d1 """
+    for item in d2:
+        if item not in d1:
+            d1[item] = d2[item]
+            continue
+        if is_numeric(d2[item]):
+            if is_numeric(d1[item]):
+                d1[item] += d2[item]
+                continue
+            raise InvalidAttrTypeError

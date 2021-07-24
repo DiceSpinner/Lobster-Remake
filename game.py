@@ -3,14 +3,14 @@ import math
 import pygame
 from effect import *
 from particles import *
-from utilities import Positional, Movable, Collidable, Attackable, \
-    DynamicStats, Regenable
+from Creatures import NPC, Player
+from utilities import Positional, Movable, Collidable, Regenable, Staminaized, \
+    BufferedStats
 from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
 from settings import *
 from data_structures import PriorityQueue
-from math_formula import segment_intersection, line_circle_intersection, \
-    point_vec_left, point_vec_right, point_on_segment
+from error import CollidedParticleNameError
 import os
 
 
@@ -71,7 +71,7 @@ class GameMap:
                         pre_p.info['y'] = pos_y
                         pre_p.info['map_name'] = self.name
                         particle_class = globals()[pre_p.info['class']]
-                        par = particle_class(pre_p.info)
+                        par = particle_class(pre_p.info.copy())
                         if isinstance(par, Block):
                             self.blocks[i].append(par)
                             self.all_blocks.append(par)
@@ -276,17 +276,19 @@ class Camera(Positional):
 class Level:
     """
     Description: Levels of the game
+
     === Public Attributes ===
     difficulty: difficulty of the level
     goal: The goal of the level
     running: Whether this level is running
+
     === Private Attributes ===
-    _asset: Loaded assets of the game
-    _asset_name: The locations of game assets
     _game_maps: Loaded game maps, accessed by their names
     _map_names: Name of the maps
+    _particle_names: Names of the file that stores predefined particles info
     _camera: Camera for this level
     _initialized: Whether the level has been initialized
+
     === Representation Invariants ===
     - difficulty must be an integer from 0 - 3
     """
@@ -295,16 +297,21 @@ class Level:
     _game_maps: dict[str, GameMap]
     _camera: Camera
     _map_names: List[str]
+    _particle_names: List[str]
     _initialized: bool
     running: bool
     fonts: dict[str, pygame.font.Font]
     texts: dict[str, pygame.Surface]
 
     def __init__(self, asset: List[str]) -> None:
+        self._map_names = []
+        self._particle_names = []
         for line in asset:
-            line = line.split('=')
+            line = line.rstrip().split('=')
             if line[0] == 'maps':
                 self._map_names = line[1].split(':')
+            elif line[0] == 'pre_particles':
+                self._particle_names.append(line[1])
         self.difficulty = 0  # default difficulty
         self._initialized = False
         self._game_maps = {}
@@ -315,10 +322,15 @@ class Level:
     def _load_maps(self) -> None:
         # load in predefined particles
         look_up = {}
-        with open('predefined-particles.txt', 'r') as file:
-            for line in file:
-                p = PredefinedParticle(line)
-                look_up[p.info['name']] = p
+        for name in self._particle_names:
+            path = os.path.join("Predefined Particles", name)
+            particles = os.listdir(path)
+            for particle in particles:
+                pre_p = PredefinedParticle(os.path.join(path, particle))
+                if pre_p.info['name'] not in look_up:
+                    look_up[pre_p.info['name']] = pre_p
+                else:
+                    raise CollidedParticleNameError
 
         for m in self._map_names:
             name = os.path.join("assets/maps", m + ".txt")
@@ -352,16 +364,13 @@ class Level:
                                   self._game_maps)
         player_key = list(Player.player_group)[0]
         player = Player.player_group[player_key]
-
         player_input = []
-
         # mouse tracking
         mouse_pos = pygame.mouse.get_pos()
         pos = Positional({})
         pos.x = mouse_pos[0] + self._camera.x
         pos.y = mouse_pos[1] + self._camera.y
         player.aim(pos)
-
         # player input and other game actions
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -371,7 +380,7 @@ class Level:
                 player_input.append(event)
 
         # creature actions
-        for creature in Creature.creature_group:
+        for creature in Creature.creature_group.copy():
             Creature.creature_group[creature].action(player_input)
 
         # particle status update
@@ -391,12 +400,11 @@ class Level:
                         self._game_maps[particle.map_name].all_collision_boxs:
                     self._game_maps[
                         particle.map_name].all_collision_boxs.append(particle)
-            if isinstance(particle, Attackable) or isinstance(particle,
-                                                              CollisionBox):
+            if isinstance(particle, Staminaized):
                 particle.count()
-                if isinstance(particle, CollisionBox):
-                    particle.sync()
-
+            if isinstance(particle, CollisionBox):
+                CollisionBox.count(particle)
+                particle.sync()
             if isinstance(particle, Regenable):
                 particle.regen()
 
@@ -424,15 +432,16 @@ class Level:
         # reset buffer
         for particle in Particle.particle_group:
             particle = Particle.particle_group[particle]
-            if isinstance(particle, DynamicStats):
+            if isinstance(particle, BufferedStats):
                 particle.reset()
 
     def player_info_display(self, player: Player, screen: pygame.Surface):
         health_bar_width = 300
         health_bar_height = 12
         resource_bar_width = 200
+        resource_bar_height = 12
         stamina_bar_height = 12
-        stamina_bar_width = 150
+        stamina_bar_width = 250
 
         health_percent = player.health / player.max_health
         health_bar = pygame.Surface((health_percent * health_bar_width,
@@ -447,6 +456,13 @@ class Level:
         stamina_bar.fill((0, 255, 0))
         screen.blit(self.texts['stamina_bar'], (80, 100))
         screen.blit(stamina_bar, (80, 120))
+
+        mana_percent = player.mana / player.max_mana
+        mana_bar = pygame.Surface((mana_percent * resource_bar_width,
+                                    resource_bar_height))
+        mana_bar.fill((0, 255, 255))
+        screen.blit(self.texts['resource_bar'], (80, 140))
+        screen.blit(mana_bar, (80, 160))
 
     def exit(self):
         """
