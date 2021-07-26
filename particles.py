@@ -1,6 +1,6 @@
 from __future__ import annotations
 import pygame
-from typing import List, Tuple, Union, Optional, Any
+from typing import List, Tuple, Union, Optional, Any, Set
 from utilities import Positional, Movable, Collidable, Lightable, Living, \
     Directional, get_direction
 from bool_expr import BoolExpr, construct_from_str
@@ -8,7 +8,7 @@ from settings import *
 from error import InvalidConstructionInfo
 
 
-class Particle(Positional):
+class Particle(Collidable):
     """
     Description: Customized sprites
 
@@ -25,28 +25,27 @@ class Particle(Positional):
     # static fields
     ID = 0
     particle_group = {}
+    new_particles = {}
     light_particles = {}
     textures = {}
     rotation = {}
     sounds = {}
+    game_map = {}  # dict[str, List[List[List[int]]]]
 
     id: int
     display_priority: int
     texture: str
     _texture: pygame.Surface
     name: str
-    detection_radius: int
-    _surrounding_tiles: dict[int, dict[int, Particle]]
-    _surrounding_entities: dict[int, dict[int, List[Particle]]]
+    occupation: dict[str, Set[Tuple[int, int]]]
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         default = {
             'display_priority': DEFAULT_DISPLAY_PRIORITY,
             'texture': DEFAULT_PARTICLE_TEXTURE,
             'name': DEFAULT_PARTICLE_NAME,
-            'detection_radius': DEFAULT_DETECTION_RADIUS
         }
-        attr = ['display_priority', 'texture', 'name', 'detection_radius']
+        attr = ['display_priority', 'texture', 'name']
         super().__init__(info)
         self.id = Particle.ID
         Particle.ID += 1
@@ -56,10 +55,11 @@ class Particle(Positional):
         for item in info:
             if item in attr:
                 setattr(self, item, info[item])
-        self._texture = Particle.textures[self.texture]
-        self._surrounding_tiles = []
-        self._surrounding_entities = []
+        self.occupation = {self.map_name: set()}
+        self._texture = pygame.transform.scale(Particle.textures[self.texture],
+                                               (self.diameter, self.diameter))
         Particle.particle_group[self.id] = self
+        Particle.new_particles[self.id] = self
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
@@ -68,149 +68,32 @@ class Particle(Positional):
     def remove(self):
         """ Remove this particle from the game """
         Particle.particle_group.pop(self.id, None)
+        for coor in self.occupation[self.map_name]:
+            Particle.game_map[self.map_name][coor[0]][coor[1]].remove(self.id)
 
-    def update_surroundings(self, tiles: dict[int, dict[int, Particle]],
-                            entities: dict[int, dict[int, List[Particle]]]):
-        self._surrounding_tiles = tiles
-        self._surrounding_entities = entities
-
-    def get_adjacent_entities(self, diagonal=False) -> List[Particle]:
-        if isinstance(self, Collidable):
-            center_x = int((self.x - 1 + self.diameter / 2) // TILE_SIZE)
-            center_y = int((self.y - 1 + self.diameter / 2) // TILE_SIZE)
-        else:
-            center_x = int((self.x // TILE_SIZE))
-            center_y = int((self.y // TILE_SIZE))
-
-        left = (center_x - 1, center_y)
-        top = (center_x, center_y - 1)
-        right = (center_x + 1, center_y)
-        down = (center_x, center_y + 1)
-        returning = [left, top, right, down, (center_x, center_y)]
-        if diagonal:
-            top_left = (center_x - 1, center_y - 1)
-            top_right = (center_x + 1, center_y - 1)
-            bottom_right = (center_x + 1, center_y + 1)
-            bottom_left = (center_x - 1, center_y + 1)
-            returning += [top_right, top_left, bottom_right, bottom_left]
-        lst = []
-        for item in returning:
-            if item[1] in self._surrounding_entities:
-                if item[0] in self._surrounding_entities[item[1]]:
-                    lst += self._surrounding_entities[item[1]][item[0]]
-        return lst
-
-    def get_adjacent_tiles(self, diagonal=False) -> List[Particle]:
-        if isinstance(self, Collidable):
-            center_x = int((self.x - 1 + self.diameter / 2) // TILE_SIZE)
-            center_y = int((self.y - 1 + self.diameter / 2) // TILE_SIZE)
-        else:
-            center_x = int((self.x // TILE_SIZE))
-            center_y = int((self.y // TILE_SIZE))
-
-        left = (center_x - 1, center_y)
-        top = (center_x, center_y - 1)
-        right = (center_x + 1, center_y)
-        down = (center_x, center_y + 1)
-        returning = [left, top, right, down]
-        if diagonal:
-            top_left = (center_x - 1, center_y - 1)
-            top_right = (center_x + 1, center_y - 1)
-            bottom_right = (center_x + 1, center_y + 1)
-            bottom_left = (center_x - 1, center_y + 1)
-            returning += [top_right, top_left, bottom_right, bottom_left]
-        lst = []
-        for item in returning:
-            if item[1] in self._surrounding_tiles:
-                if item[0] in self._surrounding_tiles[item[1]]:
-                    lst.append(self._surrounding_tiles[item[1]][item[0]])
-        return lst
+    def update_map_position(self):
+        """ Update the position of the particle on the game map """
+        occupied = self.occupation.copy()
+        new_pos = calculate_colliding_tiles(self.x, self.y,
+                                            self.get_stat('diameter'))
+        for mp in occupied:
+            for point in occupied[mp].copy():
+                if not mp == self.map_name or point not in new_pos:
+                    self.occupation[mp].remove(point)
+                    Particle.game_map[mp][point[0]][point[1]].remove(self.id)
+                else:
+                    new_pos.remove(point)
+        for point in new_pos:
+            if self.map_name not in self.occupation:
+                self.occupation[self.map_name] = set()
+            self.occupation[self.map_name].add(point)
+            Particle.game_map[self.map_name][point[0]][point[1]].add(self.id)
 
     def __str__(self):
         return self.name
 
 
-class Item(Collidable, Particle):
-    """ Description: An object represents an item in game
-
-    """
-    pass
-
-
-class CollidableParticle(Particle, Collidable):
-    """ Particles that implements the collidable interface """
-
-    def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
-        super().__init__(info)
-        self._texture = pygame.transform.scale(self._texture,
-                                               (self.diameter, self.diameter))
-
-    def get_tile_in_contact(self) -> Particle:
-        col = int((self.x - 1 + self.diameter / 2) // TILE_SIZE)
-        row = int((self.y - 1 + self.diameter / 2) // TILE_SIZE)
-        return self._surrounding_tiles[row][col]
-
-
-class CollisionBox(CollidableParticle):
-    """ A stationary particle used to collision detection
-
-    === Public Attributes ===
-    _ self_destroy: Ticks before self-destruction
-    - owner: The particle that created this collision box
-
-    === Private Attributes ===
-    - _self_destroy_counter: self-destruction counter
-    """
-    target: BoolExpr
-    self_destroy: int
-    _self_destroy_counter: int
-    owner: Particle
-    collsion_box_group = {}
-
-    def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
-        if "display_priority" not in info:
-            info['display_priority'] = 1
-        super().__init__(info)
-        CollisionBox.collsion_box_group[self.id] = self
-        attr = ["self_destroy", "_self_destroy_counter", 'owner']
-        default = {
-            'self_destroy': int(FPS // 2),
-            '_self_destroy_counter': 0,
-        }
-        for key in default:
-            if key not in info:
-                info[key] = default[key]
-        for item in attr:
-            if item in info:
-                setattr(self, item, info[item])
-            else:
-                raise InvalidConstructionInfo
-
-    def count(self) -> None:
-        self._self_destroy_counter += 1
-        if self._self_destroy_counter >= self.self_destroy:
-            self.remove()
-
-    def sync(self):
-        if isinstance(self.owner, Living):
-            if self.owner.is_dead():
-                self.remove()
-        self.map_name = self.owner.map_name
-        if isinstance(self.owner, Collidable):
-            self.x = self.owner.x - 1 + self.owner.get_stat('diameter') / 2 - \
-                     self.owner.get_stat('attack_range')
-            self.y = self.owner.y - 1 + self.owner.get_stat('diameter') / 2 - \
-                     self.owner.get_stat('attack_range')
-        else:
-            self.x = self.owner.x - self.owner.get_stat('attack_range')
-            self.y = self.owner.y - self.owner.get_stat('attack_range')
-
-    def remove(self):
-        Particle.remove(self)
-        CollisionBox.collsion_box_group.pop(self.id, None)
-
-
-class DirectionalParticle(CollidableParticle, Directional):
+class DirectionalParticle(Particle, Directional):
     """ Collidable particles that implements the directional interface """
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
@@ -282,7 +165,7 @@ class MovableParticle(DirectionalParticle, Movable):
         return x_d, y_d, c_x, c_y, x_time, y_time
 
     def direction_increment(self, time: int, direction: str, total: float,
-                            current: int, particles: List[Collidable])\
+                            current: int)\
             -> Tuple[float, float]:
         """ Increment the position of the particle in given direction """
         vel = 'v' + direction
@@ -297,8 +180,14 @@ class MovableParticle(DirectionalParticle, Movable):
                 setattr(self, direction, getattr(self, direction) + value)
                 n = int(getattr(self, direction))
                 if abs(n - current) >= 1:
+                    particles = get_particles_by_tiles(
+                        self.map_name,
+                        calculate_colliding_tiles(self.x, self.y,
+                                                  self.diameter))
                     for particle in particles:
-                        if particle.solid and self.solid \
+                        particle = Particle.particle_group[particle]
+                        if not particle.id == self.id and particle.solid and \
+                                self.solid \
                                 and self.detect_collision(particle):
                             setattr(self, direction, getattr(self, direction) -
                                     value)
@@ -307,20 +196,71 @@ class MovableParticle(DirectionalParticle, Movable):
         return total, current
 
     def update_position(self) -> None:
-        particles = []
-        for row in self._surrounding_tiles:
-            row = self._surrounding_tiles[row]
-            for p in row:
-                particles.append(row[p])
-        particles += self.get_adjacent_entities(True)
-        if self in particles:
-            particles.remove(self)
         x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
         while x_d > 0 or y_d > 0:
             x_d, c_x = self.direction_increment(x_time, "x",
-                                                x_d, c_x, particles)
+                                                x_d, c_x)
             y_d, c_y = self.direction_increment(y_time, "y",
-                                                y_d, c_y, particles)
+                                                y_d, c_y)
+        self.update_map_position()
+
+
+class Block(Particle, Lightable):
+    """
+
+    """
+    block_group = {}
+
+    def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
+        super().__init__(info)
+        Block.block_group[self.id] = self
+
+    def remove(self):
+        Particle.remove(self)
+        Block.block_group.pop(self.id, None)
+
+    def get_tiles_in_radius(self, radius=1, corner=True) -> List[Block]:
+        """ Return tiles in the given radius """
+        row = int(self.y // TILE_SIZE)
+        col = int(self.x // TILE_SIZE)
+        start_row = row - radius
+        end_row = row + radius
+        start_col = col - radius
+        end_col = col + radius
+
+        width = len(Particle.game_map[self.map_name])
+        height = len(Particle.game_map[self.map_name][0])
+        if start_row < 0:
+            start_row = 0
+        if end_row >= height:
+            end_row = height - 1
+        if start_col < 0:
+            start_col = 0
+        if end_col >= width:
+            end_col = width - 1
+
+        tiles = []
+        for x in range(start_row, end_row + 1):
+            dif = abs(x - row)
+            for y in range(start_col, end_col + 1):
+                if not corner and abs(y - col) > (radius - dif):
+                    continue
+                ps = Particle.game_map[self.map_name][x][y]
+                for p in ps:
+                    if p in Block.block_group:
+                        tiles.append(Block.block_group[p])
+        return tiles
+
+    def light(self):
+        self.enlighten(self)
+        if self.get_stat('brightness') > 0:
+            blocks = self.get_tiles_in_radius(1, False)
+            for block in blocks:
+                if not block.id == self.id:
+                    if block.get_stat('brightness') < self.get_stat(
+                            'brightness'):
+                        self.enlighten(block)
+                        block.light()
 
 
 class Creature(MovableParticle, Living, Lightable):
@@ -344,14 +284,15 @@ class Creature(MovableParticle, Living, Lightable):
         if "display_priority" not in info:
             info['display_priority'] = 2
         super().__init__(info)
-        self._texture = pygame.transform.scale(
-            Particle.textures[self.texture], (self.diameter * 2,
-                                              self.diameter * 2))
+        if 'color' in info:
+            self._texture = pygame.transform.scale(
+                Particle.textures[self.texture], (self.diameter * 2,
+                                                  self.diameter * 2))
         Creature.creature_group[self.id] = self
         attr = ["active", 'color', 'light_on']
         default = {
             'active': True,
-            'color': (255, 255, 255),
+            'color': None,
             'light_on': True
         }
         for key in default:
@@ -376,12 +317,13 @@ class Creature(MovableParticle, Living, Lightable):
         return surface
 
     def _draw_color_on_texture(self, surface: pygame.Surface) -> None:
-        radius = self.diameter // 2
-        size = surface.get_size()
-        cx = round(size[0] / 2, 0)
-        cy = round(size[1] / 2, 0)
-        pygame.draw.circle(
-            surface, self.color, (cx, cy), radius)
+        if self.color is not None:
+            radius = self.diameter // 2
+            size = surface.get_size()
+            cx = round(size[0] / 2, 0)
+            cy = round(size[1] / 2, 0)
+            pygame.draw.circle(
+                surface, self.color, (cx, cy), radius)
 
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
         """ AI of this creature, this method should
@@ -389,13 +331,22 @@ class Creature(MovableParticle, Living, Lightable):
         """
         raise NotImplementedError
 
+    def get_tiles_in_contact(self) -> List[Block]:
+        bs = []
+        for t in self.occupation[self.map_name]:
+            tile = Particle.game_map[self.map_name][t[0]][t[1]]
+            for ps in tile:
+                if ps in Block.block_group:
+                    bs.append(Block.block_group[ps])
+        return bs
+
     def light(self):
-        tile = self.get_tile_in_contact()
-        assert isinstance(tile, Lightable)
+        tiles = self.get_tiles_in_contact()
         sl = self.get_stat('light_source')
-        ol = tile.get_stat('light_source')
-        if ol < sl:
-            tile.add_stats({'light_source': sl - ol})
+        for tile in tiles:
+            ol = tile.get_stat('light_source')
+            if ol < sl:
+                tile.add_stats({'light_source': sl - ol})
 
     def die(self):
         self.remove()
@@ -405,26 +356,33 @@ class Creature(MovableParticle, Living, Lightable):
         Creature.creature_group.pop(self.id, None)
 
 
-class Block(CollidableParticle, Lightable):
-    """
+def calculate_colliding_tiles(x: float, y: float, diameter: int,
+                              ) -> List[Tuple[int, int]]:
+    """ Return the coordinates of the colliding tiles with the given info """
+    start_col = int(x // TILE_SIZE)
+    start_row = int(y // TILE_SIZE)
+    end_col = int((x + diameter - 1) // TILE_SIZE)
+    end_row = int((y + diameter - 1) // TILE_SIZE)
+    new_pos = []
+    for x in range(start_col, end_col + 1):
+        for y in range(start_row, end_row + 1):
+            new_pos.append((y, x))
+    return new_pos
 
-    """
-    block_group = {}
 
-    def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
-        super().__init__(info)
-        Block.block_group[self.id] = self
+def get_particles_by_tiles(map_name: str,
+                           coordinates: List[Tuple[int, int]]) -> Set[int]:
+    """ Return particle ids inside tiles given by the coordinates """
+    mp = Particle.game_map[map_name]
+    ps = set()
+    for coord in coordinates:
+        ps.update(mp[coord[0]][coord[1]].copy())
+    return ps
 
-    def remove(self):
-        Particle.remove(self)
-        Block.block_group.pop(self.id, None)
 
-    def light(self):
-        self.enlighten(self)
-        if self.get_stat('brightness') > 0:
-            blocks = self.get_adjacent_tiles()
-            for block in blocks:
-                assert isinstance(block, Block)
-                if block.get_stat('brightness') < self.get_stat('brightness'):
-                    self.enlighten(block)
-                    block.light()
+def get_nearby_particles(particle: Particle) -> Set[int]:
+    """ Return a set of nearby particles around the given particle """
+    r = set()
+    tiles = calculate_colliding_tiles(particle.x, particle.y, particle.diameter)
+    r.update(get_particles_by_tiles(particle.map_name, tiles))
+    return r

@@ -1,10 +1,67 @@
 import pygame
 
-from particles import Creature, CollisionBox, Particle
+from particles import Creature, Particle, calculate_colliding_tiles, \
+    get_nearby_particles, \
+    get_particles_by_tiles
 from utilities import OffensiveStats, Living, Manaized, Staminaized, Collidable
 from bool_expr import BoolExpr, construct_from_str
 from typing import Union, Tuple, List
+from error import InvalidConstructionInfo
 from settings import *
+
+
+class CollisionBox(Creature):
+    """ A stationary particle used to collision detection
+
+    === Public Attributes ===
+    _ self_destroy: Ticks before self-destruction
+    - owner: The particle that created this collision box
+
+    === Private Attributes ===
+    - _self_destroy_counter: self-destruction counter
+    """
+    target: BoolExpr
+    self_destroy: int
+    _self_destroy_counter: int
+    owner: Particle
+
+    def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
+        if "display_priority" not in info:
+            info['display_priority'] = 1
+        super().__init__(info)
+        attr = ["self_destroy", "_self_destroy_counter", 'owner']
+        default = {
+            'self_destroy': int(FPS // 2),
+            '_self_destroy_counter': 0,
+        }
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+        for item in attr:
+            if item in info:
+                setattr(self, item, info[item])
+            else:
+                raise InvalidConstructionInfo
+
+    def action(self, player_input=None) -> None:
+        self._self_destroy_counter += 1
+        self.sync()
+        if self._self_destroy_counter >= self.self_destroy:
+            self.health = 0
+
+    def sync(self):
+        self.map_name = self.owner.map_name
+        if isinstance(self.owner, Collidable):
+            self.x = self.owner.x - 1 + self.owner.get_stat('diameter') / 2 - \
+                     self.owner.get_stat('attack_range')
+            self.y = self.owner.y - 1 + self.owner.get_stat('diameter') / 2 - \
+                     self.owner.get_stat('attack_range')
+        else:
+            self.x = self.owner.x - self.owner.get_stat('attack_range')
+            self.y = self.owner.y - self.owner.get_stat('attack_range')
+
+    def remove(self):
+        Creature.remove(self)
 
 
 class StandardAttacks(Creature, OffensiveStats, Manaized):
@@ -83,15 +140,20 @@ class StandardAttacks(Creature, OffensiveStats, Manaized):
             'shape': self.shape,
             'texture': self.action_textures['basic_attack'],
             'owner': self,
+            'light_source': self.get_stat('light_source'),
             'x': c2x,
             'y': c2y,
+            'solid': False,
             'map_name': self.map_name
         }
         collision_box = CollisionBox(info)
-        for entity in self.get_adjacent_entities(True):
-            if isinstance(entity, Creature) and self._is_target(entity):
-                if collision_box.detect_collision(entity):
-                    entity.health -= self.get_stat('attack_power')
+        living = list(filter(lambda c: isinstance(Particle.particle_group[c],
+            Living), get_nearby_particles(collision_box)))
+        for entity in living:
+            entity = Particle.particle_group[entity]
+            if self._is_target(entity) and \
+                    collision_box.detect_collision(entity):
+                entity.health -= self.get_stat('attack_power')
         self._attack_counter = 0
         return True
 
@@ -143,24 +205,16 @@ class Fireball(Projectile):
             self.destroyed = True
 
     def update_position(self) -> None:
-        particles = []
-        for row in self._surrounding_tiles:
-            row = self._surrounding_tiles[row]
-            for p in row:
-                particles.append(row[p])
-        particles += self.get_adjacent_entities(True)
-        if self in particles:
-            particles.remove(self)
         x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
         while (x_d > 0 or y_d > 0) and not self.destroyed:
             x_d, c_x = self.direction_increment(x_time, "x",
-                                                x_d, c_x, particles)
+                                                x_d, c_x)
             y_d, c_y = self.direction_increment(y_time, "y",
-                                                y_d, c_y, particles)
+                                                y_d, c_y)
+        self.update_map_position()
 
     def direction_increment(self, time: int, direction: str, total: float,
-                            current: int, particles: List[Collidable]) \
-            -> Tuple[float, float]:
+                            current: int) -> Tuple[float, float]:
         """ Increment the position of the particle in given direction """
         vel = 'v' + direction
         for i in range(time):
@@ -174,11 +228,14 @@ class Fireball(Projectile):
                 setattr(self, direction, getattr(self, direction) + value)
                 n = int(getattr(self, direction))
                 if abs(n - current) >= 1:
+                    particles = get_particles_by_tiles(
+                        self.map_name,
+                        calculate_colliding_tiles(self.x, self.y,
+                                                  self.diameter))
                     for particle in particles:
+                        particle = Particle.particle_group[particle]
                         attr = vars(particle)
                         attr['obj'] = particle
-                        if particle.name == 'W':
-                            x = 1
                         if not self.ignore.eval(attr) and \
                                 (self._is_target(particle) or particle.solid) \
                                 and self.detect_collision(particle):
@@ -193,7 +250,7 @@ class Fireball(Projectile):
             self.update_position()
         else:
             self.basic_attack(None)
-            self.remove()
+            self.health = 0
 
 
 class ProjectileThrowable(Creature, OffensiveStats, Manaized):
@@ -240,7 +297,7 @@ class ProjectileThrowable(Creature, OffensiveStats, Manaized):
         """
         c1x = self.x - 1 + self.get_stat('diameter') / 2
         c1y = self.y - 1 + self.get_stat('diameter') / 2
-        ball_size = int(self.get_stat('fireball_explosion_range') // 2)
+        ball_size = int(self.get_stat('fireball_explosion_range'))
         c2x = c1x - ball_size // 2
         c2y = c1y - ball_size // 2
         condition = "( id = self.id or id = " + str(self.id) + " )"
@@ -258,6 +315,7 @@ class ProjectileThrowable(Creature, OffensiveStats, Manaized):
             'direction': self.direction,
             'x': c2x,
             'y': c2y,
-            'map_name': self.map_name
+            'map_name': self.map_name,
+            'basic_attack_texture': 'fireball_explosion.png'
         }
         Fireball(info)
