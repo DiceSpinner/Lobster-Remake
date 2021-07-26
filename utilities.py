@@ -310,7 +310,7 @@ class Lightable(BufferedStats):
                                           self.get_stat('brightness')})
         light_level = self.get_stat('brightness') - \
                       self.get_stat('light_resistance')
-        if light_level < 0:
+        if light_level <= 0:
             return
         if light_level > other.get_stat('brightness'):
             other.add_stats({'brightness': light_level -

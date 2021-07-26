@@ -185,7 +185,7 @@ class Camera(Positional):
             item.display(screen, new_dict[item.id])
 
         # display brightness
-        font = pygame.font.Font(None, 25)
+        # font = pygame.font.Font(None, 25)
         for i in range(start_row, end_row):
             for j in range(start_col, end_col):
                 tile = current_map.content[i][j]
@@ -208,10 +208,10 @@ class Camera(Positional):
                     display_x = round(tile.x - self.x)
                     display_y = round(tile.y - self.y)
                     screen.blit(dark, (display_x, display_y))
-                    num = font.render(str(tile.get_stat('brightness')), True,
-                                   (255, 255, 0))
-                    screen.blit(num, (display_x + tile.diameter // 3,
-                     display_y + tile.diameter // 3))
+                    # num = font.render(str(tile.get_stat('brightness')), True,
+                    #               (255, 255, 0))
+                    # screen.blit(num, (display_x + tile.diameter // 3,
+                    # display_y + tile.diameter // 3))
 
 
 class Level:
@@ -455,7 +455,7 @@ class Game:
         cursor_image = pygame.transform.scale(cursor_image, (24, 24))
         while running:
             clock.tick(self.frame_rate)
-            # d(clock.get_fps())
+            # print(clock.get_fps())
             self._screen.fill((0, 0, 0))
             if self._level_selecting:
                 self._selected_level = 0

@@ -6,6 +6,7 @@ from utilities import Positional, Movable, Collidable, Lightable, Living, \
 from bool_expr import BoolExpr, construct_from_str
 from settings import *
 from error import InvalidConstructionInfo
+from data_structures import Queue
 
 
 class Particle(Collidable):
@@ -251,16 +252,27 @@ class Block(Particle, Lightable):
                         tiles.append(Block.block_group[p])
         return tiles
 
-    def light(self):
+    def light(self) -> None:
+        """ Raise brightness of nearby blocks """
+        queue = Queue()
+        called = set()
+        called.add(self.id)
         self.enlighten(self)
-        if self.get_stat('brightness') > 0:
-            blocks = self.get_tiles_in_radius(1, False)
-            for block in blocks:
-                if not block.id == self.id:
-                    if block.get_stat('brightness') < self.get_stat(
-                            'brightness'):
-                        self.enlighten(block)
-                        block.light()
+        for block in self.get_tiles_in_radius(1, False):
+            if block.id not in called:
+                queue.enqueue((self.id, block.id))
+        while not queue.is_empty():
+            item = queue.dequeue()
+            p1 = Block.block_group[item[0]]
+            p2 = Block.block_group[item[1]]
+            if p1.get_stat("brightness") - p1.get_stat('light_resistance') > p2.get_stat("brightness"):
+                p1.enlighten(p2)
+                called.add(item[1])
+                tiles = p2.get_tiles_in_radius(1, False)
+                if p2.get_stat("brightness") > 0:
+                    for block in tiles:
+                        if block.id not in called:
+                            queue.enqueue((p2.id, block.id))
 
 
 class Creature(MovableParticle, Living, Lightable):
