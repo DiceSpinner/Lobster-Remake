@@ -79,7 +79,7 @@ class Player(StandardAttacks, ProjectileThrowable):
         Player.player_group.pop(self.id, None)
 
 
-class NPC(StandardAttacks):
+class NPC(StandardAttacks, ProjectileThrowable):
     """ Description: Non-Player Character class
 
     Additional Attributes:
@@ -93,7 +93,11 @@ class NPC(StandardAttacks):
         NPC.npc_group[self.id] = self
 
     def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
-        self.perform_act('basic_attack')
+        # self.perform_act('basic_attack')
+        self.direction += 1
+        if self.direction >= 360:
+            self.direction -= 360
+        self.perform_act('fireball')
         self.update_position()
 
     def remove(self):

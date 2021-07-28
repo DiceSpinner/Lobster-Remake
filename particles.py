@@ -5,7 +5,7 @@ from utilities import Positional, Movable, Collidable, Lightable, Living, \
     Directional, get_direction
 from bool_expr import BoolExpr, construct_from_str
 from settings import *
-from error import InvalidConstructionInfo
+from error import InvalidConstructionInfo, UnknownTextureError
 from data_structures import Queue
 
 
@@ -28,6 +28,7 @@ class Particle(Collidable):
     particle_group = {}
     new_particles = {}
     light_particles = {}
+    raw_textures = {}
     textures = {}
     rotation = {}
     sounds = {}
@@ -36,7 +37,6 @@ class Particle(Collidable):
     id: int
     display_priority: int
     texture: str
-    _texture: pygame.Surface
     name: str
     occupation: dict[str, Set[Tuple[int, int]]]
 
@@ -57,14 +57,14 @@ class Particle(Collidable):
             if item in attr:
                 setattr(self, item, info[item])
         self.occupation = {self.map_name: set()}
-        self._texture = pygame.transform.scale(Particle.textures[self.texture],
-                                               (self.diameter, self.diameter))
         Particle.particle_group[self.id] = self
         Particle.new_particles[self.id] = self
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
-        screen.blit(self._texture, location)
+        d = self.get_stat("diameter")
+        texture = get_texture_by_info(self.texture, (d, d), 0, 255)
+        screen.blit(texture, location)
 
     def remove(self):
         """ Remove this particle from the game """
@@ -75,7 +75,7 @@ class Particle(Collidable):
     def update_map_position(self):
         """ Update the position of the particle on the game map """
         occupied = self.occupation.copy()
-        new_pos = calculate_colliding_tiles(self.x, self.y,
+        new_pos = calculate_colliding_tiles(round(self.x, 0), round(self.y, 0),
                                             self.get_stat('diameter'))
         for mp in occupied:
             for point in occupied[mp].copy():
@@ -124,11 +124,8 @@ class DirectionalParticle(Particle, Directional):
         screen.blit(texture, [cx, cy])
 
     def get_texture(self):
-        """ Return the texture of current direction """
-        if self.direction not in Particle.rotation[self.texture][self.diameter]:
-            Particle.rotation[self.texture][self.diameter][self.direction] = \
-                pygame.transform.rotate(self._texture, self.direction)
-        return Particle.rotation[self.texture][self.diameter][self.direction]
+        d = self.get_stat("diameter")
+        return get_texture_by_info(self.texture, (d, d), self.direction, 255)
 
 
 class MovableParticle(DirectionalParticle, Movable):
@@ -166,7 +163,7 @@ class MovableParticle(DirectionalParticle, Movable):
         return x_d, y_d, c_x, c_y, x_time, y_time
 
     def direction_increment(self, time: int, direction: str, total: float,
-                            current: int)\
+                            current: int) \
             -> Tuple[float, float]:
         """ Increment the position of the particle in given direction """
         vel = 'v' + direction
@@ -179,6 +176,7 @@ class MovableParticle(DirectionalParticle, Movable):
                     value = self.get_stat(vel) - int(self.get_stat(vel))
                     total = 0
                 setattr(self, direction, getattr(self, direction) + value)
+                self.update_map_position()
                 n = int(getattr(self, direction))
                 if abs(n - current) >= 1:
                     particles = get_particles_by_tiles(
@@ -192,6 +190,7 @@ class MovableParticle(DirectionalParticle, Movable):
                                 and self.detect_collision(particle):
                             setattr(self, direction, getattr(self, direction) -
                                     value)
+                            self.update_map_position()
                             total = 0
                             break
         return total, current
@@ -203,7 +202,6 @@ class MovableParticle(DirectionalParticle, Movable):
                                                 x_d, c_x)
             y_d, c_y = self.direction_increment(y_time, "y",
                                                 y_d, c_y)
-        self.update_map_position()
 
 
 class Block(Particle, Lightable):
@@ -265,7 +263,9 @@ class Block(Particle, Lightable):
             item = queue.dequeue()
             p1 = Block.block_group[item[0]]
             p2 = Block.block_group[item[1]]
-            if p1.get_stat("brightness") - p1.get_stat('light_resistance') > p2.get_stat("brightness"):
+            value = p1.get_stat("brightness") - p1.get_stat('light_resistance')
+            if not (value < p2.get_stat("brightness") or value < p2.get_stat(
+                    "light_source")):
                 p1.enlighten(p2)
                 called.add(item[1])
                 tiles = p2.get_tiles_in_radius(1, False)
@@ -287,6 +287,7 @@ class Creature(MovableParticle, Living, Lightable):
 
     """
     creature_group = {}
+    creature_textures = {}
     active: bool
     color: Tuple[int, int, int]
     rotation: dict[int, dict[float, pygame.Surface]]
@@ -296,15 +297,11 @@ class Creature(MovableParticle, Living, Lightable):
         if "display_priority" not in info:
             info['display_priority'] = 2
         super().__init__(info)
-        if 'color' in info:
-            self._texture = pygame.transform.scale(
-                Particle.textures[self.texture], (self.diameter * 2,
-                                                  self.diameter * 2))
         Creature.creature_group[self.id] = self
         attr = ["active", 'color', 'light_on']
         default = {
             'active': True,
-            'color': None,
+            'color': (255, 255, 255),
             'light_on': True
         }
         for key in default:
@@ -315,18 +312,16 @@ class Creature(MovableParticle, Living, Lightable):
                 setattr(self, item, info[item])
 
     def get_texture(self):
-        if self.id in Creature.rotation:
-            if self.direction in Creature.rotation[self.id]:
-                surface = Creature.rotation[self.id][self.direction]
-            else:
-                surface = DirectionalParticle.get_texture(self)
-                self._draw_color_on_texture(surface)
-                Creature.rotation[self.id][self.direction] = surface
-        else:
-            surface = DirectionalParticle.get_texture(self)
-            self._draw_color_on_texture(surface)
-            Creature.rotation[self.id] = {self.direction: surface}
-        return surface
+        d = self.get_stat("diameter")
+        tup = (self.texture, (d, d), self.direction, 255, self.color)
+        try:
+            return Creature.creature_textures[tup]
+        except KeyError:
+            raw = get_texture_by_info(self.texture, (d * 2, d * 2),
+                                      self.direction, 255)
+            self._draw_color_on_texture(raw)
+            Creature.creature_textures[tup] = raw
+            return raw
 
     def _draw_color_on_texture(self, surface: pygame.Surface) -> None:
         if self.color is not None:
@@ -398,3 +393,24 @@ def get_nearby_particles(particle: Particle) -> Set[int]:
     tiles = calculate_colliding_tiles(particle.x, particle.y, particle.diameter)
     r.update(get_particles_by_tiles(particle.map_name, tiles))
     return r
+
+
+def get_texture_by_info(name: str, size: Tuple[int, int], direction: float,
+                        alpha: int) \
+        -> pygame.Surface:
+    """ Return the texture with the given info, if texture with the given
+    configuration does not exist but is loaded into Particle.raw_textures,
+    generate the texture with this configuration and return it.
+    """
+    if name in Particle.raw_textures:
+        tup = (name, size, direction, alpha)
+        try:
+            return Particle.textures[tup]
+        except KeyError:
+            raw_texture = Particle.raw_textures[name]
+            scaled = pygame.transform.scale(raw_texture, size)
+            rotated = pygame.transform.rotate(scaled, direction)
+            rotated.set_alpha(alpha)
+            Particle.textures[tup] = rotated
+            return rotated
+    raise UnknownTextureError

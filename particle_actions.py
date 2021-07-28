@@ -31,7 +31,7 @@ class CollisionBox(Creature):
         super().__init__(info)
         attr = ["self_destroy", "_self_destroy_counter", 'owner']
         default = {
-            'self_destroy': int(FPS // 2),
+            'self_destroy': int(FPS // 10),
             '_self_destroy_counter': 0,
         }
         for key in default:
@@ -59,9 +59,6 @@ class CollisionBox(Creature):
         else:
             self.x = self.owner.x - self.owner.get_stat('attack_range')
             self.y = self.owner.y - self.owner.get_stat('attack_range')
-
-    def remove(self):
-        Creature.remove(self)
 
 
 class StandardAttacks(Creature, OffensiveStats, Manaized):
@@ -161,18 +158,11 @@ class StandardAttacks(Creature, OffensiveStats, Manaized):
         return self.target.eval(vars(particle))
 
 
-class Projectile(StandardAttacks):
-
-    def __init__(self, info: dict[str, Union[str, float, int, Tuple, List]]) \
-            -> None:
-        super().__init__(info)
-
-
-class Fireball(Projectile):
+class Fireball(StandardAttacks):
     """ A projectile that damages nearby living particles on contact
 
     === Public Attributes ===
-    - self_destruction: Number of frames before self-destruction
+    - self_destruction: Number of seconds before self-destruction
     - destroyed: Whether this object has been destroyed
     - ignore: A boolexpr that determines which particles to ignore
     === Private Attributes ===
@@ -201,7 +191,7 @@ class Fireball(Projectile):
 
     def count_down(self):
         self._self_destroy_counter += 1
-        if self._self_destroy_counter >= self.self_destruction:
+        if self._self_destroy_counter >= self.self_destruction * FPS:
             self.destroyed = True
 
     def update_position(self) -> None:
@@ -211,7 +201,6 @@ class Fireball(Projectile):
                                                 x_d, c_x)
             y_d, c_y = self.direction_increment(y_time, "y",
                                                 y_d, c_y)
-        self.update_map_position()
 
     def direction_increment(self, time: int, direction: str, total: float,
                             current: int) -> Tuple[float, float]:
@@ -226,6 +215,7 @@ class Fireball(Projectile):
                     value = self.get_stat(vel) - int(self.get_stat(vel))
                     total = 0
                 setattr(self, direction, getattr(self, direction) + value)
+                self.update_map_position()
                 n = int(getattr(self, direction))
                 if abs(n - current) >= 1:
                     particles = get_particles_by_tiles(

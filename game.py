@@ -65,10 +65,11 @@ class GameMap:
 
     def insert(self, particle: Particle):
         """ Insert the particle to the map """
-        start_col = int(particle.x // self.tile_size)
-        start_row = int(particle.y // self.tile_size)
-        end_col = int((particle.x + particle.diameter - 1) // self.tile_size)
-        end_row = int((particle.y + particle.diameter - 1) // self.tile_size)
+        diameter = particle.get_stat("diameter")
+        start_col = int(round(particle.x, 0) // self.tile_size)
+        start_row = int(round(particle.y, 0) // self.tile_size)
+        end_col = int((round(particle.x, 0) + diameter - 1) // self.tile_size)
+        end_row = int((round(particle.y, 0) + diameter - 1) // self.tile_size)
         for x in range(start_col, end_col + 1):
             for y in range(start_row, end_row + 1):
                 self.content[y][x].add(particle.id)
@@ -493,9 +494,13 @@ def _load_assets():
     path = "assets/images"
     paths = os.listdir(path)
     for p in paths:
-        Particle.textures[p] = pygame.image.load(
+        pic = pygame.image.load(
             os.path.join(path, p)).convert_alpha()
-        Particle.rotation[p] = {}
+        Particle.raw_textures[p] = pic
+        # Loaded textures are being accessed by 4 parameters
+        # in the order of name -> size -> direction -> alpha value
+        tup = (p, pic.get_size(), 0, 0)
+        Particle.textures[tup] = pic
     path = "assets/sounds"
     paths = os.listdir(path)
     for p in paths:
