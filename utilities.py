@@ -79,9 +79,8 @@ class Positional(BufferedStats):
         super().__init__(info)
 
 
-class Movable(Positional, BufferedStats):
-    """ An interface that provides movement methods in addition to positional
-        attributes.
+class Movable(BufferedStats):
+    """ An interface that provides movement attributes.
 
     === Public Attributes ===
     - vx: Velocity of the object in x-direction
@@ -113,24 +112,6 @@ class Movable(Positional, BufferedStats):
         for item in info:
             if item in attr:
                 setattr(self, item, info[item])
-
-    def update_position(self) -> None:
-        """
-        Update the object's position.
-        """
-        raise NotImplementedError
-
-    def move(self, direction: Union[float, Positional]) -> None:
-        """ Move towards the target direction or object """
-        if isinstance(direction, Positional):
-            direction = get_direction((self.x, self.y), (direction.x,
-                                                         direction.y))
-        direction = math.radians(direction)
-        speed = self.get_stat('speed') / FPS
-        self.add_stats(
-            {'vx': speed * round(math.cos(direction), 2)})
-        self.add_stats(
-            {'vy': - speed * round(math.sin(direction), 2)})
 
 
 class Directional(Positional):
@@ -375,18 +356,27 @@ class Living(Regenable):
     - health: The health of the object
     - max_health: The maximum hit points of the object
     - death: Whether this object is dead
+    - incoming_damage: The amount of damage this unit will take during the
+        current frame
+    - incoming_healing: The amount of healing this unit will receive during the
+        current frame
     """
     health: float
     max_health: float
     death: BoolExpr
+    incoming_damage: float
+    incoming_healing: float
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
-        attr = ['health', 'max_health', 'death']
+        attr = ['health', 'max_health', 'death', 'incoming_damage',
+                'incoming_healing']
         default = {
             'health': DEFAULT_HEALTH,
             'health_regen': DEFAULT_HEALTH_REGEN,
             'max_health': DEFAULT_MAX_HEALTH,
-            'death': construct_from_str("( not health > 0 )")
+            'death': construct_from_str("( not health > 0 )"),
+            'incoming_damage': 0,
+            'incoming_healing': 0
         }
         for key in default:
             if key not in info:
@@ -397,9 +387,18 @@ class Living(Regenable):
 
     def calculate_health(self) -> None:
         """ Update health with value changes in the buffer """
-        self.health = self.get_stat('health')
-        if 'health' in self._buffer_stats:
-            self._buffer_stats['health'] = 0
+        heal = self.get_stat("incoming_healing")
+        damage = self.get_stat("incoming_damage")
+        if heal > 0:
+            self.health += heal
+        if damage > 0:
+            self.health -= damage
+
+    def register_damage(self, damage: float) -> None:
+        self.add_stats({"incoming_damage": damage})
+
+    def register_healing(self, healing: float) -> None:
+        self.add_stats({"incoming_healing": healing})
 
     def is_dead(self) -> bool:
         """ Check whether this object is dead """
@@ -410,7 +409,7 @@ class Living(Regenable):
 
 
 class Staminaized(Regenable):
-    """ Interface that provides access to advanced movements
+    """ Interface that provides access to movements
 
     === Public Attributes ===
     - stamina: The required stats to perform advanced movements
@@ -419,7 +418,9 @@ class Staminaized(Regenable):
     - actions: The collection of all actions this unit can perform
     - action_cooldown: The collection of the cooldowns of the actions of
         this unit
+    - action_time: The amount of frames each action is going to last
     - action_textures: Names of assets of Visual Displays of actions
+    - executing: Timer for actions that are being executed.
 
     === Private Attributes ===
     - _cooldown_counter: The collection of the counter of the cooldowns of the
@@ -430,8 +431,11 @@ class Staminaized(Regenable):
     stamina_costs: dict[str, float]
     actions: dict[str, Callable]
     action_cooldown: dict[str, float]
+    action_time: dict[str, int]
     action_textures: dict[str, str]
-    _cooldown_counter: dict[str, float]
+    executing: dict[str, Tuple[Any, int]]
+    _cooldown_counter: dict[str, int]
+    _timer: dict[str, int]
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
         attr = ['stamina', 'max_stamina']
@@ -444,7 +448,9 @@ class Staminaized(Regenable):
         self.stamina_costs = {}
         self.action_cooldown = {}
         self.action_textures = {}
+        self.action_time = {}
         self._cooldown_counter = {}
+        self.executing = {}
         for key in default:
             if key not in info:
                 info[key] = default[key]
@@ -454,7 +460,7 @@ class Staminaized(Regenable):
 
     def can_act(self, name: str) -> bool:
         """ Return whether the given action can be performed """
-        if name in self.actions:
+        if name in self.actions and name not in self.executing:
             # Check if the action is on cooldown
             if name in self.action_cooldown:
                 if self._cooldown_counter[name] < self.action_cooldown[name] * \
@@ -473,13 +479,25 @@ class Staminaized(Regenable):
             if self._cooldown_counter[counter] < value:
                 self._cooldown_counter[counter] += 1
 
-    def perform_act(self, name: str, *args: Optional) -> None:
-        """ Execute the given action """
+    def enqueue_movement(self, name: str, args: dict[str, Any]) -> None:
+        """ Enqueue the action """
         if self.can_act(name):
             # consume resource if successfully executed movements
-            self.actions[name](*args)
+            tup = (args, self.action_time[name])
+            self.executing[name] = tup
             self.resource_consume(name)
             self._cooldown_counter[name] = 0
+
+    def execute_movement(self):
+        """ Execute movements in self.executing """
+        for movement in self.executing.copy():
+            args = self.executing[movement][0]
+            value = self.executing[movement][1] - 1
+            self.actions[movement](**args)
+            if value == 0:
+                self.executing.pop(movement, None)
+            else:
+                self.executing[movement] = (args, value)
 
     def resource_consume(self, name: str):
         """ Consume the resource for performing this action """
@@ -492,14 +510,17 @@ class Staminaized(Regenable):
             1. name of the action accessed by "name"
             2. stamina cost of the action accessed by "stamina_cost"
             3. cooldown of the action accessed by "cooldown"
+            4. Length of the action accessed by "time"
 
         Optional:
             1. Texture of the action accessed by "texture"
         """
+        name = info['name']
         self.actions[info['name']] = getattr(self, info['name'])
         self.stamina_costs[info['name']] = info['stamina_cost']
         self.action_cooldown[info['name']] = info['cooldown']
         self._cooldown_counter[info['name']] = 0
+        self.action_time[name] = math.ceil(info['time'])
         if 'texture' in info:
             self.action_textures[info['name']] = info['texture']
 
@@ -552,6 +573,7 @@ class Manaized(Staminaized):
             2. stamina cost of the action accessed by "stamina_cost"
             3. mana cost of the action accessed by "mana_cost"
             4. cooldown of the action accessed by "cooldown"
+            5. Length of the action accessed by "time"
 
         Optional:
             1. Texture of the action accessed by "texture"
@@ -560,16 +582,20 @@ class Manaized(Staminaized):
         self.mana_costs[info['name']] = info['mana_cost']
 
 
-class OffensiveStats:
+class CombatStats:
     """ Interface that provides offensive stats
 
     === Public Attributes ===
     - attack_power: The strength of the attack
     - ability_power: Scaling factor for ability strength
+    - defense: Scaling factor for defense effectiveness
+    - active_damage_reduction: Damage reduction for this unit in guarded stance
     """
 
     attack_power: float
     ability_power: float
+    defense: float
+    active_damage_reduction: float
 
     def __init__(self, info: dict[str, Union[int, float]]) -> None:
         self._attack_counter = 0

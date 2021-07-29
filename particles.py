@@ -1,8 +1,9 @@
 from __future__ import annotations
 import pygame
+import math
 from typing import List, Tuple, Union, Optional, Any, Set
 from utilities import Positional, Movable, Collidable, Lightable, Living, \
-    Directional, get_direction
+    Directional, get_direction, Staminaized
 from bool_expr import BoolExpr, construct_from_str
 from settings import *
 from error import InvalidConstructionInfo, UnknownTextureError
@@ -128,82 +129,6 @@ class DirectionalParticle(Particle, Directional):
         return get_texture_by_info(self.texture, (d, d), self.direction, 255)
 
 
-class MovableParticle(DirectionalParticle, Movable):
-    """ Directional particles that implements the movable interface
-    """
-
-    def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
-        super().__init__(info)
-
-    def calculate_order(self) -> Tuple[float, float, int, int, int, int]:
-        x_d = abs(self.get_stat('vx'))
-        y_d = abs(self.get_stat('vy'))
-        c_x = int(self.x)
-        c_y = int(self.y)
-        if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
-            return 0, 0, 0, 0, 0, 0
-        if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
-            return
-        if self.get_stat('vx') == 0:
-            x_time = 0
-            y_time = 1
-        elif self.get_stat('vy') == 0:
-            x_time = 1
-            y_time = 0
-        elif abs(self.get_stat('vx')) > abs(self.get_stat('vy')):
-            x_time = int(round(abs(self.get_stat('vx')) / abs(self.get_stat(
-                'vy')), 0))
-            y_time = 1
-        elif abs(self.get_stat('vx')) < abs(self.get_stat('vy')):
-            x_time = 1
-            y_time = int(round(abs(self.get_stat('vy')) / abs(self.get_stat(
-                'vx')), 0))
-        else:
-            x_time, y_time = 1, 1
-        return x_d, y_d, c_x, c_y, x_time, y_time
-
-    def direction_increment(self, time: int, direction: str, total: float,
-                            current: int) \
-            -> Tuple[float, float]:
-        """ Increment the position of the particle in given direction """
-        vel = 'v' + direction
-        for i in range(time):
-            if total > 0:
-                if total >= 1:
-                    value = self.get_stat(vel) / abs(self.get_stat(vel))
-                    total -= 1
-                else:
-                    value = self.get_stat(vel) - int(self.get_stat(vel))
-                    total = 0
-                setattr(self, direction, getattr(self, direction) + value)
-                self.update_map_position()
-                n = int(getattr(self, direction))
-                if abs(n - current) >= 1:
-                    particles = get_particles_by_tiles(
-                        self.map_name,
-                        calculate_colliding_tiles(self.x, self.y,
-                                                  self.diameter))
-                    for particle in particles:
-                        particle = Particle.particle_group[particle]
-                        if not particle.id == self.id and particle.solid and \
-                                self.solid \
-                                and self.detect_collision(particle):
-                            setattr(self, direction, getattr(self, direction) -
-                                    value)
-                            self.update_map_position()
-                            total = 0
-                            break
-        return total, current
-
-    def update_position(self) -> None:
-        x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
-        while x_d > 0 or y_d > 0:
-            x_d, c_x = self.direction_increment(x_time, "x",
-                                                x_d, c_x)
-            y_d, c_y = self.direction_increment(y_time, "y",
-                                                y_d, c_y)
-
-
 class Block(Particle, Lightable):
     """
 
@@ -275,7 +200,7 @@ class Block(Particle, Lightable):
                             queue.enqueue((p2.id, block.id))
 
 
-class Creature(MovableParticle, Living, Lightable):
+class Creature(DirectionalParticle, Living, Lightable):
     """
     Description: Movable particles that can act on its own
 
@@ -315,13 +240,13 @@ class Creature(MovableParticle, Living, Lightable):
         d = self.get_stat("diameter")
         tup = (self.texture, (d, d), self.direction, 255, self.color)
         try:
-            return Creature.creature_textures[tup]
+            return Creature.creature_textures[tup].copy()
         except KeyError:
             raw = get_texture_by_info(self.texture, (d * 2, d * 2),
                                       self.direction, 255)
             self._draw_color_on_texture(raw)
             Creature.creature_textures[tup] = raw
-            return raw
+            return raw.copy()
 
     def _draw_color_on_texture(self, surface: pygame.Surface) -> None:
         if self.color is not None:
@@ -405,12 +330,12 @@ def get_texture_by_info(name: str, size: Tuple[int, int], direction: float,
     if name in Particle.raw_textures:
         tup = (name, size, direction, alpha)
         try:
-            return Particle.textures[tup]
+            return Particle.textures[tup].copy()
         except KeyError:
             raw_texture = Particle.raw_textures[name]
             scaled = pygame.transform.scale(raw_texture, size)
             rotated = pygame.transform.rotate(scaled, direction)
             rotated.set_alpha(alpha)
             Particle.textures[tup] = rotated
-            return rotated
+            return rotated.copy()
     raise UnknownTextureError

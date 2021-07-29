@@ -1,9 +1,10 @@
 import pygame
-
+import math
 from particles import Creature, Particle, calculate_colliding_tiles, \
     get_nearby_particles, \
     get_particles_by_tiles
-from utilities import OffensiveStats, Living, Manaized, Staminaized, Collidable
+from utilities import CombatStats, Living, Manaized, Staminaized, Collidable, \
+    Movable, get_direction, Positional
 from bool_expr import BoolExpr, construct_from_str
 from typing import Union, Tuple, List
 from error import InvalidConstructionInfo
@@ -61,7 +62,7 @@ class CollisionBox(Creature):
             self.y = self.owner.y - self.owner.get_stat('attack_range')
 
 
-class StandardAttacks(Creature, OffensiveStats, Manaized):
+class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
     """ Creatures with a melee AOE sweep attack implementation of the attackable
     method, must be inherited by other sub-creature classes in order to utilize
     the methods.
@@ -96,7 +97,8 @@ class StandardAttacks(Creature, OffensiveStats, Manaized):
         self.target.substitute(vars(self))
 
         optional = {
-            'basic_attack_texture': BASIC_ATTACK_TEXTURE
+            'basic_attack_texture': BASIC_ATTACK_TEXTURE,
+            'guard_texture': BASIC_ATTACK_TEXTURE
         }
         for op in optional:
             if op not in info:
@@ -107,9 +109,17 @@ class StandardAttacks(Creature, OffensiveStats, Manaized):
             'stamina_cost': DEFAULT_ATTACK_STAMINA_COST,
             'mana_cost': DEFAULT_ATTACK_MANA_COST,
             'cooldown': 0,
-            'texture': info['basic_attack_texture']
+            'texture': info['basic_attack_texture'],
+            'time': DEFAULT_ACTION_TIMER
         }
-        moves = [ba]
+        mv = {
+            'name': 'move',
+            'stamina_cost': 0,
+            'mana_cost': 0,
+            'cooldown': 0,
+            'time': DEFAULT_ACTION_TIMER
+        }
+        moves = [ba, mv]
         for move in moves:
             self.add_movement(move)
 
@@ -150,15 +160,96 @@ class StandardAttacks(Creature, OffensiveStats, Manaized):
             entity = Particle.particle_group[entity]
             if self._is_target(entity) and \
                     collision_box.detect_collision(entity):
-                entity.health -= self.get_stat('attack_power')
+                entity.register_damage(self.get_stat('attack_power'))
         self._attack_counter = 0
         return True
+
+    def apply_velocity(self, direction: Union[float, Positional]) -> None:
+        """ Move towards the target direction or object """
+        if isinstance(direction, Positional):
+            direction = get_direction((self.x, self.y), (direction.x,
+                                                         direction.y))
+        direction = math.radians(direction)
+        speed = self.get_stat('speed') / FPS
+        self.add_stats(
+            {'vx': speed * round(math.cos(direction), 2)})
+        self.add_stats(
+            {'vy': - speed * round(math.sin(direction), 2)})
+
+    def calculate_order(self) -> Tuple[float, float, int, int, int, int]:
+        x_d = abs(self.get_stat('vx'))
+        y_d = abs(self.get_stat('vy'))
+        c_x = int(self.x)
+        c_y = int(self.y)
+        if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
+            return 0, 0, 0, 0, 0, 0
+        if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
+            return
+        if self.get_stat('vx') == 0:
+            x_time = 0
+            y_time = 1
+        elif self.get_stat('vy') == 0:
+            x_time = 1
+            y_time = 0
+        elif abs(self.get_stat('vx')) > abs(self.get_stat('vy')):
+            x_time = int(round(abs(self.get_stat('vx')) / abs(self.get_stat(
+                'vy')), 0))
+            y_time = 1
+        elif abs(self.get_stat('vx')) < abs(self.get_stat('vy')):
+            x_time = 1
+            y_time = int(round(abs(self.get_stat('vy')) / abs(self.get_stat(
+                'vx')), 0))
+        else:
+            x_time, y_time = 1, 1
+        return x_d, y_d, c_x, c_y, x_time, y_time
+
+    def direction_increment(self, time: int, direction: str, total: float,
+                            current: int) \
+            -> Tuple[float, float]:
+        """ Increment the position of the particle in given direction """
+        vel = 'v' + direction
+        for i in range(time):
+            if total > 0:
+                if total >= 1:
+                    value = self.get_stat(vel) / abs(self.get_stat(vel))
+                    total -= 1
+                else:
+                    value = self.get_stat(vel) - int(self.get_stat(vel))
+                    total = 0
+                setattr(self, direction, getattr(self, direction) + value)
+                self.update_map_position()
+                n = int(getattr(self, direction))
+                if abs(n - current) >= 1:
+                    particles = get_particles_by_tiles(
+                        self.map_name,
+                        calculate_colliding_tiles(self.x, self.y,
+                                                  self.diameter))
+                    for particle in particles:
+                        particle = Particle.particle_group[particle]
+                        if not particle.id == self.id and particle.solid and \
+                                self.solid \
+                                and self.detect_collision(particle):
+                            setattr(self, direction, getattr(self, direction) -
+                                    value)
+                            self.update_map_position()
+                            total = 0
+                            break
+        return total, current
+
+    def move(self, direction: Union[float, Positional]) -> None:
+        self.apply_velocity(direction)
+        x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
+        while x_d > 0 or y_d > 0:
+            x_d, c_x = self.direction_increment(x_time, "x",
+                                                x_d, c_x)
+            y_d, c_y = self.direction_increment(y_time, "y",
+                                                y_d, c_y)
 
     def _is_target(self, particle: Particle) -> bool:
         return self.target.eval(vars(particle))
 
 
-class Fireball(StandardAttacks):
+class Fireball(StandardMoveSet):
     """ A projectile that damages nearby living particles on contact
 
     === Public Attributes ===
@@ -243,7 +334,7 @@ class Fireball(StandardAttacks):
             self.health = 0
 
 
-class ProjectileThrowable(Creature, OffensiveStats, Manaized):
+class ProjectileThrowable(Creature, CombatStats, Manaized):
     """
     """
     target: BoolExpr
@@ -275,7 +366,8 @@ class ProjectileThrowable(Creature, OffensiveStats, Manaized):
                 'stamina_cost': DEFAULT_ABILITY_STAMINA_COST,
                 'mana_cost': DEFAULT_ABILITY_MANA_COST,
                 'cooldown': DEFAULT_ABILITY_COOLDOWN,
-                'texture': info['fireball_texture']
+                'texture': info['fireball_texture'],
+                'time': DEFAULT_ACTION_TIMER
             }
         ]
         for move in moves:

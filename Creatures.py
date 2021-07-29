@@ -1,10 +1,10 @@
-from particle_actions import StandardAttacks, ProjectileThrowable
+from particle_actions import StandardMoveSet, ProjectileThrowable
 from particles import Creature
 from typing import List, Tuple, Union, Optional
 import pygame
 
 
-class Player(StandardAttacks, ProjectileThrowable):
+class Player(StandardMoveSet, ProjectileThrowable):
     """
     Description: Player class
 
@@ -46,40 +46,41 @@ class Player(StandardAttacks, ProjectileThrowable):
                     effective_directions.append(key)
                 else:
                     effective_directions.remove(pygame.K_a)
-        if pygame.K_w in effective_directions:
-            if pygame.K_a in effective_directions:
-                self.move(135)
+        if len(effective_directions) > 0:
+            direction = 0
+            if pygame.K_w in effective_directions:
+                if pygame.K_a in effective_directions:
+                    direction = 135
+                elif pygame.K_d in effective_directions:
+                    direction = 45
+                else:
+                    direction = 90
+            elif pygame.K_s in effective_directions:
+                if pygame.K_a in effective_directions:
+                    direction = 225
+                elif pygame.K_d in effective_directions:
+                    direction = 315
+                else:
+                    direction = 270
+            elif pygame.K_a in effective_directions:
+                direction = 180
             elif pygame.K_d in effective_directions:
-                self.move(45)
-            else:
-                self.move(90)
-        elif pygame.K_s in effective_directions:
-            if pygame.K_a in effective_directions:
-                self.move(225)
-            elif pygame.K_d in effective_directions:
-                self.move(315)
-            else:
-                self.move(270)
-        elif pygame.K_a in effective_directions:
-            self.move(180)
-        elif pygame.K_d in effective_directions:
-            self.move(0)
-
+                direction = 0
+            self.enqueue_movement('move', {"direction": direction})
         # light
 
         # attack
         if self.mouse_buttons[0] == 1:
-            self.perform_act('basic_attack')
+            self.enqueue_movement('basic_attack', {})
         if pygame.K_q in self.pressed_keys:
-            self.perform_act('fireball')
-        self.update_position()
+            self.enqueue_movement('fireball', {})
 
     def remove(self):
         Creature.remove(self)
         Player.player_group.pop(self.id, None)
 
 
-class NPC(StandardAttacks, ProjectileThrowable):
+class NPC(StandardMoveSet, ProjectileThrowable):
     """ Description: Non-Player Character class
 
     Additional Attributes:
@@ -97,8 +98,7 @@ class NPC(StandardAttacks, ProjectileThrowable):
         self.direction += 1
         if self.direction >= 360:
             self.direction -= 360
-        self.perform_act('fireball')
-        self.update_position()
+        self.enqueue_movement('fireball', {})
 
     def remove(self):
         Creature.remove(self)

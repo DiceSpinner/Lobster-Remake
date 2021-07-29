@@ -102,6 +102,7 @@ class Camera(Positional):
     - min_x: minimum y-coordinate of the camera on the current map
     - min_y: minimum y-coordinate of the camera on the current map
     """
+    shades = {}
     game_maps: dict[str, GameMap]
     height: int
     width: int
@@ -190,9 +191,6 @@ class Camera(Positional):
         for i in range(start_row, end_row):
             for j in range(start_col, end_col):
                 tile = current_map.content[i][j]
-                dark = pygame.Surface((TILE_SIZE,
-                                       TILE_SIZE))
-                dark.fill((0, 0, 0))
                 for item in tile:
                     if item in Block.block_group:
                         tile = Block.block_group[item]
@@ -203,9 +201,10 @@ class Camera(Positional):
                     if t.get_stat("brightness") > 0:
                         flag = True
                         break
-                if tile.get_stat('brightness') > 0 or flag:
-                    if tile.get_stat('brightness') > 0:
-                        dark.set_alpha(255 - tile.get_stat('brightness'))
+                brightness = tile.get_stat('brightness')
+                if brightness > 0 or flag:
+                    alpha = 255 - brightness
+                    dark = get_shade(alpha)
                     display_x = round(tile.x - self.x)
                     display_y = round(tile.y - self.y)
                     screen.blit(dark, (display_x, display_y))
@@ -324,18 +323,26 @@ class Level:
         active_map = self._game_maps[player.map_name]
 
         # particle status update
+        living = []
         for particle in active_map.all_particles:
             particle = Particle.particle_group[particle]
+            if isinstance(particle, Regenable):
+                particle.regen()
             if isinstance(particle, Creature):
                 particle.action(player_input)
             if isinstance(particle, Living):
-                if particle.is_dead():
-                    particle.die()
-                    continue
+                living.append(particle)
             if isinstance(particle, Staminaized):
                 particle.count()
-            if isinstance(particle, Regenable):
-                particle.regen()
+        for particle in active_map.all_particles:
+            particle = Particle.particle_group[particle]
+            if isinstance(particle, Staminaized):
+                particle.execute_movement()
+
+        for particle in living:
+            particle.calculate_health()
+            if particle.is_dead():
+                particle.die()
         active_map.update_contents()
 
         # lighting
@@ -505,3 +512,15 @@ def _load_assets():
     paths = os.listdir(path)
     for p in paths:
         Particle.sounds[p] = pygame.mixer.Sound(os.path.join(path, p))
+
+
+def get_shade(alpha: int) -> pygame.Surface:
+    """ Return the shade with the given alpha value """
+    try:
+        return Camera.shades[alpha].copy()
+    except KeyError:
+        surface = pygame.Surface((TILE_SIZE, TILE_SIZE))
+        surface.fill((0, 0, 0))
+        surface.set_alpha(alpha)
+        Camera.shades[alpha] = surface
+        return surface.copy()
