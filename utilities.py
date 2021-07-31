@@ -1,10 +1,19 @@
 from __future__ import annotations
 from typing import Union, List, Optional, Any, Tuple, Callable
-from error import UnknownShapeError, UnknownStaminaCostError, \
-    UnknownManaCostError, UnknownCooldownError, InvalidAttrTypeError
+from error import UnknownShapeError, InvalidAttrTypeError
 from bool_expr import BoolExpr, construct_from_list, construct_from_str
 from settings import *
+from data_structures import WeightedPriorityQueue
 import math
+
+
+def compare_by_execution_priority(i1: Tuple[Staminaized, dict[str, Any], str],
+                                  i2: Tuple[Staminaized, dict[str, Any], str])\
+        -> bool:
+    """ Sort by non-decreasing order """
+    a1 = i1[0].actions[i1[2]]
+    a2 = i2[0].actions[i2[2]]
+    return a1.action_priority < a2.action_priority
 
 
 class BufferedStats:
@@ -288,14 +297,14 @@ class Lightable(BufferedStats):
         """ Raise self and other lightable object's brightness """
         if self.get_stat('brightness') < self.get_stat('light_source'):
             self.add_stats({'brightness': self.get_stat('light_source') -
-                                          self.get_stat('brightness')})
+                            self.get_stat('brightness')})
         light_level = self.get_stat('brightness') - \
-                      self.get_stat('light_resistance')
+            self.get_stat('light_resistance')
         if light_level <= 0:
             return
         if light_level > other.get_stat('brightness'):
             other.add_stats({'brightness': light_level -
-                                           other.get_stat('brightness')})
+                            other.get_stat('brightness')})
 
 
 class Regenable(BufferedStats):
@@ -408,34 +417,74 @@ class Living(Regenable):
         raise NotImplementedError
 
 
-class Staminaized(Regenable):
-    """ Interface that provides access to movements
+class Action:
+    """ An action that particles can perform
 
     === Public Attributes ===
-    - stamina: The required stats to perform advanced movements
-    - max_stamina: The maximum amount of stamina this unit can have
-    - stamina_costs: The collection of the cost of all staminaized actions
-    - actions: The collection of all actions this unit can perform
-    - action_cooldown: The collection of the cooldowns of the actions of
-        this unit
-    - action_time: The amount of frames each action is going to last
-    - action_textures: Names of assets of Visual Displays of actions
-    - executing: Timer for actions that are being executed.
+    - name: Name of this action
+    - stamina_cost: Stamina cost of this action
+    - mana_cost: Mana cost of this action
+    - cooldown: Cooldown of this action
+    - time: The amount of frames this action is going to last
+    - action_priority: The execution priority of this action
+    - action_texture: Names of assets of Visual Displays of this action
+    - executing: Timer for this action while executing.
 
     === Private Attributes ===
-    - _cooldown_counter: The collection of the counter of the cooldowns of the
-        spells of this unit
+    - _cooldown_counter: The counter of the cooldown
     """
+    name: str
+    cooldown: float
+    action_time: int
+    action_priority: int
+    action_texture: str
+    _cooldown_counter: int
+    method: Callable
+    executing: int
+
+    def __init__(self, info: dict[str, Any]) -> None:
+        self.name = info['name']
+        self.cooldown = info['cooldown']
+        self._cooldown_counter = self.cooldown * FPS
+        self.action_priority = info['priority']
+        self.action_time = math.ceil(info['time'])
+        self.method = info['method']
+        self.executing = 0
+        if 'texture' in info:
+            self.action_texture = info['texture']
+
+    def can_act(self) -> bool:
+        if self.executing == 0:
+            # Check if the action is on cooldown
+            if self._cooldown_counter < self.cooldown * FPS:
+                return False
+            return True
+        return False
+
+    def count(self):
+        if self._cooldown_counter < self.cooldown * FPS:
+            self._cooldown_counter += 1
+
+    def execute(self, args: dict[str, Any]):
+        self.method(**args)
+        self._cooldown_counter = 0
+        self.executing -= 1
+
+
+class Staminaized(Regenable):
+    """ Interface that provides access to actions
+
+    === Public Attributes ===
+    - stamina: The required stats to perform actions
+    - max_stamina: The maximum amount of stamina this unit can have
+    - actions: All actions this unit can perform
+    """
+
+    action_queue = WeightedPriorityQueue(compare_by_execution_priority)
     stamina: float
     max_stamina: float
+    actions: dict[str, Action]
     stamina_costs: dict[str, float]
-    actions: dict[str, Callable]
-    action_cooldown: dict[str, float]
-    action_time: dict[str, int]
-    action_textures: dict[str, str]
-    executing: dict[str, Tuple[Any, int]]
-    _cooldown_counter: dict[str, int]
-    _timer: dict[str, int]
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
         attr = ['stamina', 'max_stamina']
@@ -446,11 +495,6 @@ class Staminaized(Regenable):
         }
         self.actions = {}
         self.stamina_costs = {}
-        self.action_cooldown = {}
-        self.action_textures = {}
-        self.action_time = {}
-        self._cooldown_counter = {}
-        self.executing = {}
         for key in default:
             if key not in info:
                 info[key] = default[key]
@@ -460,44 +504,28 @@ class Staminaized(Regenable):
 
     def can_act(self, name: str) -> bool:
         """ Return whether the given action can be performed """
-        if name in self.actions and name not in self.executing:
-            # Check if the action is on cooldown
-            if name in self.action_cooldown:
-                if self._cooldown_counter[name] < self.action_cooldown[name] * \
-                        FPS:
-                    return False
+        action = self.actions[name]
+        if action.can_act():
             # Stamina check
-            if name in self.stamina_costs:
-                return self.stamina >= self.stamina_costs[name]
-            raise UnknownStaminaCostError
+            return self.stamina >= self.stamina_costs[name]
         return False
 
-    def count(self) -> None:
-        """ Increase the cooldown counter by 1 per frame. """
-        for counter in self.action_cooldown:
-            value = self.action_cooldown[counter] * FPS
-            if self._cooldown_counter[counter] < value:
-                self._cooldown_counter[counter] += 1
+    def cooldown_countdown(self) -> None:
+        """ Increase the cooldown counter of actions by 1 per frame. """
+        for name in self.actions:
+            self.actions[name].count()
 
     def enqueue_movement(self, name: str, args: dict[str, Any]) -> None:
-        """ Enqueue the action """
+        """ Add the action to the action queue """
         if self.can_act(name):
-            # consume resource if successfully executed movements
-            tup = (args, self.action_time[name])
-            self.executing[name] = tup
+            Staminaized.action_queue.enqueue((self, args, name),
+                                             self.actions[name].action_time)
+            self.actions[name].executing = self.actions[name].action_time
             self.resource_consume(name)
-            self._cooldown_counter[name] = 0
 
-    def execute_movement(self):
+    def execute_movement(self, name: str, args: dict[str, Any]):
         """ Execute movements in self.executing """
-        for movement in self.executing.copy():
-            args = self.executing[movement][0]
-            value = self.executing[movement][1] - 1
-            self.actions[movement](**args)
-            if value == 0:
-                self.executing.pop(movement, None)
-            else:
-                self.executing[movement] = (args, value)
+        self.actions[name].execute(args)
 
     def resource_consume(self, name: str):
         """ Consume the resource for performing this action """
@@ -511,18 +539,18 @@ class Staminaized(Regenable):
             2. stamina cost of the action accessed by "stamina_cost"
             3. cooldown of the action accessed by "cooldown"
             4. Length of the action accessed by "time"
+            5. Execution priority of this action accessed by "priority"
+            6. method reference of this action accessed by "method"
 
         Optional:
             1. Texture of the action accessed by "texture"
         """
         name = info['name']
-        self.actions[info['name']] = getattr(self, info['name'])
-        self.stamina_costs[info['name']] = info['stamina_cost']
-        self.action_cooldown[info['name']] = info['cooldown']
-        self._cooldown_counter[info['name']] = 0
-        self.action_time[name] = math.ceil(info['time'])
+        act = Action(info)
+        self.stamina_costs[name] = info['stamina_cost']
+        self.actions[name] = act
         if 'texture' in info:
-            self.action_textures[info['name']] = info['texture']
+            self.actions[name].action_texture = info['texture']
 
 
 class Manaized(Staminaized):
@@ -531,7 +559,7 @@ class Manaized(Staminaized):
     === Public Attributes ===
     - mana: The required stats to perform manaized movements
     - max_mana: The maximum amount of mana this unit can have
-    - mana_costs: The collection of the cost of all staminaized actions
+    - mana_costs: The mana costs of all actions
     """
     mana: float
     max_mana: float
@@ -544,20 +572,18 @@ class Manaized(Staminaized):
             'max_mana': DEFAULT_MAX_MANA,
             'mana_regen': DEFAULT_MANA_REGEN
         }
-        self.mana_costs = {}
         for key in default:
             if key not in info:
                 info[key] = default[key]
         for a in attr:
             setattr(self, a, info[a])
+        self.mana_costs = {}
         super().__init__(info)
 
     def can_act(self, name: str) -> bool:
         """ Return whether the given action can be performed """
         if Staminaized.can_act(self, name):
-            if name in self.mana_costs:
-                return self.mana >= self.mana_costs[name]
-            raise UnknownManaCostError
+            return self.mana >= self.mana_costs[name]
         return False
 
     def resource_consume(self, name: str):
@@ -571,15 +597,17 @@ class Manaized(Staminaized):
         Pre-condition: info contains all of the following
             1. name of the action accessed by "name"
             2. stamina cost of the action accessed by "stamina_cost"
-            3. mana cost of the action accessed by "mana_cost"
-            4. cooldown of the action accessed by "cooldown"
-            5. Length of the action accessed by "time"
+            3. cooldown of the action accessed by "cooldown"
+            4. Length of the action accessed by "time"
+            5. Execution priority of this action accessed by "priority"
+            6. mana cost of the action accessed by "mana_cost"
+            7. method reference of this action accessed by "method"
 
         Optional:
             1. Texture of the action accessed by "texture"
         """
-        Staminaized.add_movement(self, info)
         self.mana_costs[info['name']] = info['mana_cost']
+        Staminaized.add_movement(self, info)
 
 
 class CombatStats:
@@ -657,11 +685,13 @@ def get_direction(obj1: Tuple[float, float], obj2: Tuple[float, float]) \
             value += 360
     return round(value, 1)
 
+
 def is_numeric(item: Any) -> bool:
     """ Return whether this item is numeric """
     return isinstance(item, int) or isinstance(item, float)
 
-def dict_merge(d1: dict[str, Any], d2:dict[str, Any]):
+
+def dict_merge(d1: dict[str, Any], d2: dict[str, Any]):
     """ Import stats from d2 and merge them inside d1 """
     for item in d2:
         if item not in d1:

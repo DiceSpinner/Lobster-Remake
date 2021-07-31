@@ -98,7 +98,7 @@ class NPC(StandardMoveSet, ProjectileThrowable):
         self.direction += 1
         if self.direction >= 360:
             self.direction -= 360
-        self.enqueue_movement('fireball', {})
+        # self.enqueue_movement('fireball', {})
 
     def remove(self):
         Creature.remove(self)

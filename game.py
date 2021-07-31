@@ -61,20 +61,6 @@ class GameMap:
                         pre_p.info['map_name'] = self.name
                         particle_class = globals()[pre_p.info['class']]
                         particle = particle_class(pre_p.info.copy())
-                        self.insert(particle)
-
-    def insert(self, particle: Particle):
-        """ Insert the particle to the map """
-        diameter = particle.get_stat("diameter")
-        start_col = int(round(particle.x, 0) // self.tile_size)
-        start_row = int(round(particle.y, 0) // self.tile_size)
-        end_col = int((round(particle.x, 0) + diameter - 1) // self.tile_size)
-        end_row = int((round(particle.y, 0) + diameter - 1) // self.tile_size)
-        for x in range(start_col, end_col + 1):
-            for y in range(start_row, end_row + 1):
-                self.content[y][x].add(particle.id)
-        self.all_particles.add(particle.id)
-        particle.update_map_position()
 
     def update_contents(self) -> None:
         for particle in self.all_particles.copy():
@@ -85,7 +71,7 @@ class GameMap:
         for new_particle in Particle.new_particles.copy():
             p = Particle.particle_group[new_particle]
             if p.map_name == self.name:
-                self.insert(p)
+                self.all_particles.add(p.id)
             Particle.new_particles.pop(new_particle, None)
 
 
@@ -329,15 +315,17 @@ class Level:
             if isinstance(particle, Regenable):
                 particle.regen()
             if isinstance(particle, Creature):
+                # queue up actions
                 particle.action(player_input)
             if isinstance(particle, Living):
                 living.append(particle)
             if isinstance(particle, Staminaized):
-                particle.count()
-        for particle in active_map.all_particles:
-            particle = Particle.particle_group[particle]
-            if isinstance(particle, Staminaized):
-                particle.execute_movement()
+                particle.cooldown_countdown()
+
+        # execute particle actions
+        for i in range(Staminaized.action_queue.get_size()):
+            particle, args, name = Staminaized.action_queue.dequeue()
+            particle.execute_movement(name, args)
 
         for particle in living:
             particle.calculate_health()
@@ -463,7 +451,7 @@ class Game:
         cursor_image = pygame.transform.scale(cursor_image, (24, 24))
         while running:
             clock.tick(self.frame_rate)
-            # print(clock.get_fps())
+            print(clock.get_fps())
             self._screen.fill((0, 0, 0))
             if self._level_selecting:
                 self._selected_level = 0

@@ -3,7 +3,7 @@ import math
 from particles import Creature, Particle, calculate_colliding_tiles, \
     get_nearby_particles, \
     get_particles_by_tiles
-from utilities import CombatStats, Living, Manaized, Staminaized, Collidable, \
+from utilities import CombatStats, Living, Manaized, Staminaized, \
     Movable, get_direction, Positional
 from bool_expr import BoolExpr, construct_from_str
 from typing import Union, Tuple, List
@@ -11,12 +11,12 @@ from error import InvalidConstructionInfo
 from settings import *
 
 
-class CollisionBox(Creature):
-    """ A stationary particle used to collision detection
+class Puppet(Creature):
+    """ A stationary particle used for collision detection/animation
 
     === Public Attributes ===
     _ self_destroy: Ticks before self-destruction
-    - owner: The particle that created this collision box
+    - owner: The particle that started this puppet
 
     === Private Attributes ===
     - _self_destroy_counter: self-destruction counter
@@ -32,7 +32,7 @@ class CollisionBox(Creature):
         super().__init__(info)
         attr = ["self_destroy", "_self_destroy_counter", 'owner']
         default = {
-            'self_destroy': int(FPS // 10),
+            'self_destroy': int(FPS // 6),
             '_self_destroy_counter': 0,
         }
         for key in default:
@@ -52,26 +52,23 @@ class CollisionBox(Creature):
 
     def sync(self):
         self.map_name = self.owner.map_name
-        if isinstance(self.owner, Collidable):
-            self.x = self.owner.x - 1 + self.owner.get_stat('diameter') / 2 - \
-                     self.owner.get_stat('attack_range')
-            self.y = self.owner.y - 1 + self.owner.get_stat('diameter') / 2 - \
-                     self.owner.get_stat('attack_range')
-        else:
-            self.x = self.owner.x - self.owner.get_stat('attack_range')
-            self.y = self.owner.y - self.owner.get_stat('attack_range')
+        self.x = self.owner.x - 1 + self.owner.get_stat('diameter') / 2 - \
+            self.owner.get_stat('attack_range')
+        self.y = self.owner.y - 1 + self.owner.get_stat('diameter') / 2 - \
+            self.owner.get_stat('attack_range')
 
 
 class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
-    """ Creatures with a melee AOE sweep attack implementation of the attackable
-    method, must be inherited by other sub-creature classes in order to utilize
-    the methods.
+    """ Standard movesets that covers basic moving, offensive and defensive
+    movements, must be inherited by other sub-creature classes in order to
+    utilize these methods.
 
     === Public Attributes ===
     - attack_range: The range of basic attacks
     - attack_speed: The number of basic attacks can be performed in a second
     - target: A bool expression that gives info about target
     - attack_texture: The texture of attacks
+    - basic_attack_animation: id of the a
 
     === Private Attributes ===
     - _attack_counter: The counter for basic attack cooldown
@@ -80,6 +77,7 @@ class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
     attack_speed: float
     attack_texture: dict[str, pygame.Surface]
     target: BoolExpr
+    animations: dict[str, Puppet]
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         attr = ['attack_speed', 'attack_range', 'target']
@@ -109,15 +107,19 @@ class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
             'stamina_cost': DEFAULT_ATTACK_STAMINA_COST,
             'mana_cost': DEFAULT_ATTACK_MANA_COST,
             'cooldown': 0,
+            'priority': ATTACK_PRIORITY,
             'texture': info['basic_attack_texture'],
-            'time': DEFAULT_ACTION_TIMER
+            'time': DEFAULT_ACTION_TIMER,
+            'method': self.basic_attack
         }
         mv = {
             'name': 'move',
             'stamina_cost': 0,
             'mana_cost': 0,
             'cooldown': 0,
-            'time': DEFAULT_ACTION_TIMER
+            'priority': MOVE_PRIORITY,
+            'time': DEFAULT_ACTION_TIMER,
+            'method': self.move
         }
         moves = [ba, mv]
         for move in moves:
@@ -131,9 +133,9 @@ class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
             return True
         return False
 
-    def count(self) -> None:
+    def cooldown_countdown(self) -> None:
         """ Increase the attack counter by 1 per frame """
-        Staminaized.count(self)
+        Staminaized.cooldown_countdown(self)
         self._attack_counter += 1
 
     def basic_attack(self, target=None) -> bool:
@@ -145,7 +147,7 @@ class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
         info = {
             'diameter': self.get_stat('attack_range') * 2 + 1,
             'shape': self.shape,
-            'texture': self.action_textures['basic_attack'],
+            'texture': self.actions['basic_attack'].action_texture,
             'owner': self,
             'light_source': self.get_stat('light_source'),
             'x': c2x,
@@ -153,9 +155,10 @@ class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
             'solid': False,
             'map_name': self.map_name
         }
-        collision_box = CollisionBox(info)
+        collision_box = Puppet(info)
         living = list(filter(lambda c: isinstance(Particle.particle_group[c],
-            Living), get_nearby_particles(collision_box)))
+                                                  Living),
+                             get_nearby_particles(collision_box)))
         for entity in living:
             entity = Particle.particle_group[entity]
             if self._is_target(entity) and \
@@ -183,8 +186,6 @@ class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
         c_y = int(self.y)
         if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
             return 0, 0, 0, 0, 0, 0
-        if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
-            return
         if self.get_stat('vx') == 0:
             x_time = 0
             y_time = 1
@@ -238,6 +239,8 @@ class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
 
     def move(self, direction: Union[float, Positional]) -> None:
         self.apply_velocity(direction)
+        if self.get_stat("vx") == 0 and self.get_stat("vy") == 0:
+            return
         x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
         while x_d > 0 or y_d > 0:
             x_d, c_x = self.direction_increment(x_time, "x",
@@ -367,7 +370,9 @@ class ProjectileThrowable(Creature, CombatStats, Manaized):
                 'mana_cost': DEFAULT_ABILITY_MANA_COST,
                 'cooldown': DEFAULT_ABILITY_COOLDOWN,
                 'texture': info['fireball_texture'],
-                'time': DEFAULT_ACTION_TIMER
+                'time': DEFAULT_ACTION_TIMER,
+                'priority': ATTACK_PRIORITY,
+                'method': self.fireball
             }
         ]
         for move in moves:
@@ -383,13 +388,14 @@ class ProjectileThrowable(Creature, CombatStats, Manaized):
         c2x = c1x - ball_size // 2
         c2y = c1y - ball_size // 2
         condition = "( id = self.id or id = " + str(self.id) + " )"
-        target_condition = "( obj -> particles.Creature and " + str(self.target) + " )"
+        target_condition = "( obj -> particles.Creature and " + str(
+            self.target) + " )"
         info = {
             'diameter': ball_size,
             'shape': self.shape,
             'ignore': construct_from_str(condition),
             'light_source': FIREBALL_BRIGHTNESS,
-            'texture': self.action_textures['fireball'],
+            'texture': self.actions['fireball'].action_texture,
             'target': construct_from_str(target_condition),
             'attack_damage': self.get_stat('ability_power'),
             'attack_range': self.get_stat('fireball_explosion_range'),

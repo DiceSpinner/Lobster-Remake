@@ -58,6 +58,7 @@ class Particle(Collidable):
             if item in attr:
                 setattr(self, item, info[item])
         self.occupation = {self.map_name: set()}
+        self.update_map_position()
         Particle.particle_group[self.id] = self
         Particle.new_particles[self.id] = self
 
