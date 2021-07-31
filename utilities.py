@@ -50,7 +50,7 @@ class BufferedStats:
                     raise InvalidAttrTypeError
 
     def get_stat(self, item: str) -> Any:
-        if item in self._buffer_stats:
+        try:
             v1 = getattr(self, item)
             v2 = self._buffer_stats[item]
             if not is_numeric(v1) and not is_numeric(v2):
@@ -58,7 +58,7 @@ class BufferedStats:
             elif is_numeric(v1) and is_numeric(v2):
                 return v1 + v2
             raise InvalidAttrTypeError
-        else:
+        except KeyError:
             return getattr(self, item)
 
     def reset(self):

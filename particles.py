@@ -190,8 +190,8 @@ class Block(Particle, Lightable):
             p1 = Block.block_group[item[0]]
             p2 = Block.block_group[item[1]]
             value = p1.get_stat("brightness") - p1.get_stat('light_resistance')
-            if not (value < p2.get_stat("brightness") or value < p2.get_stat(
-                    "light_source")):
+            if value > 0 and value > p2.get_stat("brightness") and value > \
+                    p2.get_stat("light_source"):
                 p1.enlighten(p2)
                 called.add(item[1])
                 tiles = p2.get_tiles_in_radius(1, False)

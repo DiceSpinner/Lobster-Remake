@@ -451,7 +451,7 @@ class Game:
         cursor_image = pygame.transform.scale(cursor_image, (24, 24))
         while running:
             clock.tick(self.frame_rate)
-            print(clock.get_fps())
+            # print(clock.get_fps())
             self._screen.fill((0, 0, 0))
             if self._level_selecting:
                 self._selected_level = 0
