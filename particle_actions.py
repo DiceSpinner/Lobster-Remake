@@ -1,6 +1,6 @@
 import pygame
 import math
-from particles import Creature, Particle, calculate_colliding_tiles, \
+from particles import Creature, Particle, colliding_tiles_generator, \
     get_nearby_particles, \
     get_particles_by_tiles
 from utilities import CombatStats, Living, Manaized, Staminaized, \
@@ -223,7 +223,7 @@ class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
                 if abs(n - current) >= 1:
                     particles = get_particles_by_tiles(
                         self.map_name,
-                        calculate_colliding_tiles(self.x, self.y,
+                        colliding_tiles_generator(self.x, self.y,
                                                   self.diameter))
                     for particle in particles:
                         particle = Particle.particle_group[particle]
@@ -314,7 +314,7 @@ class Fireball(StandardMoveSet):
                 if abs(n - current) >= 1:
                     particles = get_particles_by_tiles(
                         self.map_name,
-                        calculate_colliding_tiles(self.x, self.y,
+                        colliding_tiles_generator(self.x, self.y,
                                                   self.diameter))
                     for particle in particles:
                         particle = Particle.particle_group[particle]

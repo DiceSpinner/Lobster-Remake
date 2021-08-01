@@ -104,7 +104,6 @@ class PriorityQueue:
     """
     Description: A queue of items sorted by their priorities, items with higher
     priority will be popped first
-
     === Private attributes ===
     _items: Items stored in this queue. The first item is being represented by
     the first item in the list.
@@ -118,9 +117,10 @@ class PriorityQueue:
         self._items = []
 
     def enqueue(self, item: Any) -> None:
-        for i in self._items:
-            if not self._comparator(item, i):
-                self._items.insert(self._items.index(i), item)
+        for i in range(len(self._items)):
+            it = self._items[i]
+            if self._comparator(item, it):
+                self._items.insert(i, item)
                 return
         self._items.append(item)
 
@@ -222,6 +222,10 @@ class WeightedPriorityQueue:
             else:
                 self._pointer += 1
             return item[1]
+
+    def reset(self):
+        """ Reset the pointer to its initial position """
+        self._pointer = 0
 
     def is_empty(self) -> bool:
         return self._size == 0

@@ -144,45 +144,15 @@ class Block(Particle, Lightable):
         Particle.remove(self)
         Block.block_group.pop(self.id, None)
 
-    def get_tiles_in_radius(self, radius=1, corner=True) -> List[Block]:
-        """ Return tiles in the given radius """
-        row = int(self.y // TILE_SIZE)
-        col = int(self.x // TILE_SIZE)
-        start_row = row - radius
-        end_row = row + radius
-        start_col = col - radius
-        end_col = col + radius
-
-        width = len(Particle.game_map[self.map_name])
-        height = len(Particle.game_map[self.map_name][0])
-        if start_row < 0:
-            start_row = 0
-        if end_row >= height:
-            end_row = height - 1
-        if start_col < 0:
-            start_col = 0
-        if end_col >= width:
-            end_col = width - 1
-
-        tiles = []
-        for x in range(start_row, end_row + 1):
-            dif = abs(x - row)
-            for y in range(start_col, end_col + 1):
-                if not corner and abs(y - col) > (radius - dif):
-                    continue
-                ps = Particle.game_map[self.map_name][x][y]
-                for p in ps:
-                    if p in Block.block_group:
-                        tiles.append(Block.block_group[p])
-        return tiles
-
     def light(self) -> None:
         """ Raise brightness of nearby blocks """
         queue = Queue()
         called = set()
         called.add(self.id)
-        self.enlighten(self)
-        for block in self.get_tiles_in_radius(1, False):
+        value = self.get_stat("light_source") - self.get_stat("brightness")
+        if value > 0:
+            self.add_stats({"brightness": value})
+        for block in get_particles_in_radius(self, 1, Block, False):
             if block.id not in called:
                 queue.enqueue((self.id, block.id))
         while not queue.is_empty():
@@ -190,15 +160,15 @@ class Block(Particle, Lightable):
             p1 = Block.block_group[item[0]]
             p2 = Block.block_group[item[1]]
             value = p1.get_stat("brightness") - p1.get_stat('light_resistance')
-            if value > 0 and value > p2.get_stat("brightness") and value > \
-                    p2.get_stat("light_source"):
-                p1.enlighten(p2)
+            b2 = p2.get_stat("brightness")
+            l2 = p2.get_stat("light_source")
+            if value > 0 and value > b2 and value > l2:
+                p2.add_stats({"brightness": value - b2})
                 called.add(item[1])
-                tiles = p2.get_tiles_in_radius(1, False)
-                if p2.get_stat("brightness") > 0:
-                    for block in tiles:
-                        if block.id not in called:
-                            queue.enqueue((p2.id, block.id))
+                tiles = get_particles_in_radius(p2, 1, Block, False)
+                for block in tiles:
+                    if block.id not in called:
+                        queue.enqueue((p2.id, block.id))
 
 
 class Creature(DirectionalParticle, Living, Lightable):
@@ -258,20 +228,18 @@ class Creature(DirectionalParticle, Living, Lightable):
             pygame.draw.circle(
                 surface, self.color, (cx, cy), radius)
 
-    def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
+    def action(self) -> None:
         """ AI of this creature, this method should
         be called on every active creature regularly
         """
         raise NotImplementedError
 
     def get_tiles_in_contact(self) -> List[Block]:
-        bs = []
         for t in self.occupation[self.map_name]:
             tile = Particle.game_map[self.map_name][t[0]][t[1]]
             for ps in tile:
                 if ps in Block.block_group:
-                    bs.append(Block.block_group[ps])
-        return bs
+                    yield Block.block_group[ps]
 
     def light(self):
         tiles = self.get_tiles_in_contact()
@@ -303,6 +271,18 @@ def calculate_colliding_tiles(x: float, y: float, diameter: int,
     return new_pos
 
 
+def colliding_tiles_generator(x: float, y: float,
+                              diameter: int,) -> List[Tuple[int, int]]:
+    """ Generate the coordinates of the colliding tiles with the given info """
+    start_col = int(x // TILE_SIZE)
+    start_row = int(y // TILE_SIZE)
+    end_col = int((x + diameter - 1) // TILE_SIZE)
+    end_row = int((y + diameter - 1) // TILE_SIZE)
+    for x in range(start_col, end_col + 1):
+        for y in range(start_row, end_row + 1):
+            yield y, x
+
+
 def get_particles_by_tiles(map_name: str,
                            coordinates: List[Tuple[int, int]]) -> Set[int]:
     """ Return particle ids inside tiles given by the coordinates """
@@ -313,10 +293,49 @@ def get_particles_by_tiles(map_name: str,
     return ps
 
 
+def get_particles_in_radius(particle: Particle, radius=1, tp=None, corner=True) -> \
+        List[Block]:
+    """ Return particles in the given radius through Generator """
+    row = int(particle.y // TILE_SIZE)
+    col = int(particle.x // TILE_SIZE)
+    start_row = row - radius
+    end_row = row + radius
+    start_col = col - radius
+    end_col = col + radius
+
+    width = len(Particle.game_map[particle.map_name])
+    height = len(Particle.game_map[particle.map_name][0])
+    if start_row < 0:
+        start_row = 0
+    if end_row >= height:
+        end_row = height - 1
+    if start_col < 0:
+        start_col = 0
+    if end_col >= width:
+        end_col = width - 1
+    yielded = set()
+    for x in range(start_row, end_row + 1):
+        dif = abs(x - row)
+        for y in range(start_col, end_col + 1):
+            if not corner and abs(y - col) > (radius - dif):
+                continue
+            ps = Particle.game_map[particle.map_name][x][y]
+            for p in ps.copy():
+                item = Particle.particle_group[p]
+                if item.id not in yielded:
+                    if tp is not None:
+                        if isinstance(item, tp):
+                            yielded.add(item.id)
+                            yield item
+                    else:
+                        yielded.add(item.id)
+                        yield item
+
+
 def get_nearby_particles(particle: Particle) -> Set[int]:
     """ Return a set of nearby particles around the given particle """
     r = set()
-    tiles = calculate_colliding_tiles(particle.x, particle.y, particle.diameter)
+    tiles = colliding_tiles_generator(particle.x, particle.y, particle.diameter)
     r.update(get_particles_by_tiles(particle.map_name, tiles))
     return r
 

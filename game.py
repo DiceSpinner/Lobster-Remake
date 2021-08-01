@@ -181,7 +181,7 @@ class Camera(Positional):
                     if item in Block.block_group:
                         tile = Block.block_group[item]
                         break
-                adjacent = tile.get_tiles_in_radius(1, True)
+                adjacent = get_particles_in_radius(tile, 1, Block, True)
                 flag = False
                 for t in adjacent:
                     if t.get_stat("brightness") > 0:
@@ -286,12 +286,13 @@ class Level:
             self.difficulty = difficulty
             player_key = list(Player.player_group)[0]
             player = Player.player_group[player_key]
+            # npc_key = list(NPC.npc_group)[0]
+            # npc = NPC.npc_group[npc_key]
             self._camera = Camera(player,
                                   screen.get_height(), screen.get_width(),
                                   self._game_maps)
         player_key = list(Player.player_group)[0]
         player = Player.player_group[player_key]
-        player_input = []
         # mouse tracking
         mouse_pos = pygame.mouse.get_pos()
         pos = Positional({})
@@ -302,30 +303,33 @@ class Level:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            elif event.type == pygame.KEYUP or event.type == pygame.KEYDOWN or \
-                    event.type == pygame.MOUSEBUTTONDOWN:
-                player_input.append(event)
 
         active_map = self._game_maps[player.map_name]
-
+        active_particles = get_particles_in_radius(player, 12, None, True)
         # particle status update
         living = []
-        for particle in active_map.all_particles:
-            particle = Particle.particle_group[particle]
+        creature = []
+        tiles = []
+        for particle in active_particles:
+            # particle = Particle.particle_group[particle]
             if isinstance(particle, Regenable):
                 particle.regen()
             if isinstance(particle, Creature):
                 # queue up actions
-                particle.action(player_input)
+                particle.action()
+                creature.append(particle)
             if isinstance(particle, Living):
                 living.append(particle)
             if isinstance(particle, Staminaized):
                 particle.cooldown_countdown()
+            if isinstance(particle, Block):
+                tiles.append(particle)
 
         # execute particle actions
         for i in range(Staminaized.action_queue.get_size()):
             particle, args, name = Staminaized.action_queue.dequeue()
             particle.execute_movement(name, args)
+        Staminaized.action_queue.reset()
 
         for particle in living:
             particle.calculate_health()
@@ -334,12 +338,10 @@ class Level:
         active_map.update_contents()
 
         # lighting
-        for creature in Creature.creature_group:
-            creature = Creature.creature_group[creature]
+        for creature in creature:
             if creature.get_stat('light_source') > 0 and creature.light_on:
                 creature.light()
-        for block in Block.block_group:
-            block = Block.block_group[block]
+        for block in tiles:
             if block.get_stat('light_source') > 0:
                 block.light()
 
@@ -469,19 +471,19 @@ class Game:
 
 def compare_by_id(p1: Particle, p2: Particle) -> bool:
     """ Sort by non-decreasing order """
-    return p2.id > p1.id
+    return p1.id > p2.id
 
 
 def compare_by_display_priority(p1: Particle, p2: Particle) -> bool:
     """ Sort by non-decreasing order """
-    return p2.display_priority > p1.display_priority
+    return p1.display_priority > p2.display_priority
 
 
 def priority_over_id(p1: Particle, p2: Particle) -> bool:
     """ Sort by non-decreasing order """
     if p1.display_priority == p2.display_priority:
-        return compare_by_id(p1, p2)
-    return compare_by_display_priority(p1, p2)
+        return p1.id > p2.id
+    return p1.display_priority > p2.display_priority
 
 
 def _load_assets():

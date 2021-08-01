@@ -43,23 +43,24 @@ class BufferedStats:
                 elif isinstance(self._buffer_stats[data], str) and \
                         isinstance(info[data], str):
                     self._buffer_stats[data] = info[data]
-                elif is_numeric(self._buffer_stats[data]) and \
-                        is_numeric(info[data]):
+                elif (isinstance(self._buffer_stats[data], int) or
+                      isinstance(self._buffer_stats[data], float)) and \
+                        (isinstance(info[data], int) or isinstance(info[data],
+                                                                   float)):
                     self._buffer_stats[data] += info[data]
                 else:
                     raise InvalidAttrTypeError
 
     def get_stat(self, item: str) -> Any:
+        v1 = getattr(self, item)
         try:
-            v1 = getattr(self, item)
             v2 = self._buffer_stats[item]
-            if not is_numeric(v1) and not is_numeric(v2):
+            f2 = isinstance(v2, int) or isinstance(v2, float)
+            if not f2:
                 return v2
-            elif is_numeric(v1) and is_numeric(v2):
-                return v1 + v2
-            raise InvalidAttrTypeError
+            return v1 + v2
         except KeyError:
-            return getattr(self, item)
+            return v1
 
     def reset(self):
         self._buffer_stats = {}
@@ -292,19 +293,6 @@ class Lightable(BufferedStats):
         for a in attr:
             setattr(self, a, info[a])
         super().__init__(info)
-
-    def enlighten(self, other: Lightable) -> None:
-        """ Raise self and other lightable object's brightness """
-        if self.get_stat('brightness') < self.get_stat('light_source'):
-            self.add_stats({'brightness': self.get_stat('light_source') -
-                            self.get_stat('brightness')})
-        light_level = self.get_stat('brightness') - \
-            self.get_stat('light_resistance')
-        if light_level <= 0:
-            return
-        if light_level > other.get_stat('brightness'):
-            other.add_stats({'brightness': light_level -
-                            other.get_stat('brightness')})
 
 
 class Regenable(BufferedStats):
@@ -686,19 +674,14 @@ def get_direction(obj1: Tuple[float, float], obj2: Tuple[float, float]) \
     return round(value, 1)
 
 
-def is_numeric(item: Any) -> bool:
-    """ Return whether this item is numeric """
-    return isinstance(item, int) or isinstance(item, float)
-
-
 def dict_merge(d1: dict[str, Any], d2: dict[str, Any]):
     """ Import stats from d2 and merge them inside d1 """
     for item in d2:
         if item not in d1:
             d1[item] = d2[item]
             continue
-        if is_numeric(d2[item]):
-            if is_numeric(d1[item]):
+        if isinstance(d2[item], int) or isinstance(d2[item], float):
+            if isinstance(d1[item], int) or isinstance(d1[item], float):
                 d1[item] += d2[item]
                 continue
             raise InvalidAttrTypeError

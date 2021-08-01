@@ -1,0 +1,7 @@
+L
+Block
+diameter~const_int~TILE_SIZE
+shape~str~square
+light_resistance~int~0
+light_source~int~256
+texture~str~light.png

@@ -15,39 +15,27 @@ class Player(StandardMoveSet, ProjectileThrowable):
 
     """
     player_group = {}
-    pressed_keys: List[int]
     mouse_buttons: Tuple[int, int, int]
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         super().__init__(info)
         Player.player_group[self.id] = self
-        self.pressed_keys = []
         self.mouse_buttons = (0, 0, 0)
 
-    def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
+    def action(self) -> None:
         self.mouse_buttons = pygame.mouse.get_pressed(3)
-        for event in player_input:
-            if event.type == pygame.KEYDOWN:
-                if event.key not in self.pressed_keys:
-                    self.pressed_keys.append(event.key)
-            elif event.type == pygame.KEYUP:
-                self.pressed_keys.remove(event.key)
+        pressed_keys = pygame.key.get_pressed()
         effective_directions = []
-        for key in self.pressed_keys:
-            if key == pygame.K_w or key == pygame.K_a:
-                effective_directions.append(key)
-            elif key == pygame.K_s:
-                if pygame.K_w not in effective_directions:
-                    effective_directions.append(key)
-                else:
-                    effective_directions.remove(pygame.K_w)
-            elif key == pygame.K_d:
-                if pygame.K_a not in effective_directions:
-                    effective_directions.append(key)
-                else:
-                    effective_directions.remove(pygame.K_a)
+        if pressed_keys[pygame.K_w] and not pressed_keys[pygame.K_s]:
+            effective_directions.append(pygame.K_w)
+        elif not pressed_keys[pygame.K_w] and pressed_keys[pygame.K_s]:
+            effective_directions.append(pygame.K_s)
+
+        if pressed_keys[pygame.K_d] and not pressed_keys[pygame.K_a]:
+            effective_directions.append(pygame.K_d)
+        elif not pressed_keys[pygame.K_d] and pressed_keys[pygame.K_a]:
+            effective_directions.append(pygame.K_a)
         if len(effective_directions) > 0:
-            direction = 0
             if pygame.K_w in effective_directions:
                 if pygame.K_a in effective_directions:
                     direction = 135
@@ -64,7 +52,7 @@ class Player(StandardMoveSet, ProjectileThrowable):
                     direction = 270
             elif pygame.K_a in effective_directions:
                 direction = 180
-            elif pygame.K_d in effective_directions:
+            else:
                 direction = 0
             self.enqueue_movement('move', {"direction": direction})
         # light
@@ -72,7 +60,7 @@ class Player(StandardMoveSet, ProjectileThrowable):
         # attack
         if self.mouse_buttons[0] == 1:
             self.enqueue_movement('basic_attack', {})
-        if pygame.K_q in self.pressed_keys:
+        if pressed_keys[pygame.K_q]:
             self.enqueue_movement('fireball', {})
 
     def remove(self):
@@ -93,12 +81,12 @@ class NPC(StandardMoveSet, ProjectileThrowable):
         super().__init__(info)
         NPC.npc_group[self.id] = self
 
-    def action(self, player_input: Optional[List[pygame.event.Event]]) -> None:
+    def action(self) -> None:
         # self.perform_act('basic_attack')
         self.direction += 1
         if self.direction >= 360:
             self.direction -= 360
-        self.enqueue_movement('fireball', {})
+        # self.enqueue_movement('fireball', {})
 
     def remove(self):
         Creature.remove(self)
