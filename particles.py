@@ -34,6 +34,7 @@ class Particle(Collidable):
     rotation = {}
     sounds = {}
     game_map = {}  # dict[str, List[List[List[int]]]]
+    Scale = 1
 
     id: int
     display_priority: int
@@ -64,7 +65,7 @@ class Particle(Collidable):
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
-        d = self.get_stat("diameter")
+        d = int(self.get_stat("diameter") * Particle.Scale)
         texture = get_texture_by_info(self.texture, (d, d), 0, 255)
         screen.blit(texture, location)
 
@@ -116,17 +117,17 @@ class DirectionalParticle(Particle, Directional):
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
-        radius = self.diameter / 2
+        radius = self.diameter / 2 * Particle.Scale
         texture = self.get_texture()
         centre_x = location[0] + radius - 1
         centre_y = location[1] + radius - 1
         size = texture.get_size()
-        cx = centre_x - round(size[0] / 2, 0) + 1
-        cy = centre_y - round(size[1] / 2, 0) + 1
+        cx = centre_x - int(size[0] / 2) + 1
+        cy = centre_y - int(size[1] / 2) + 1
         screen.blit(texture, [cx, cy])
 
     def get_texture(self):
-        d = self.get_stat("diameter")
+        d = int(self.get_stat("diameter") * Particle.Scale)
         return get_texture_by_info(self.texture, (d, d), self.direction, 255)
 
 
@@ -208,7 +209,7 @@ class Creature(DirectionalParticle, Living, Lightable):
                 setattr(self, item, info[item])
 
     def get_texture(self):
-        d = self.get_stat("diameter")
+        d = int(self.get_stat("diameter") * Particle.Scale)
         tup = (self.texture, (d, d), self.direction, 255, self.color)
         try:
             return Creature.creature_textures[tup].copy()
@@ -221,10 +222,10 @@ class Creature(DirectionalParticle, Living, Lightable):
 
     def _draw_color_on_texture(self, surface: pygame.Surface) -> None:
         if self.color is not None:
-            radius = self.diameter // 2
+            radius = self.diameter // 2 * Particle.Scale
             size = surface.get_size()
-            cx = round(size[0] / 2, 0)
-            cy = round(size[1] / 2, 0)
+            cx = int(size[0] / 2)
+            cy = int(size[1] / 2)
             pygame.draw.circle(
                 surface, self.color, (cx, cy), radius)
 

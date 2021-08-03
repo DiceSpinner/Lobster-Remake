@@ -173,11 +173,11 @@ class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
             direction = get_direction((self.x, self.y), (direction.x,
                                                          direction.y))
         direction = math.radians(direction)
-        speed = self.get_stat('speed') / FPS
+        speed = round(self.get_stat('speed') / FPS, 2)
         self.add_stats(
-            {'vx': speed * round(math.cos(direction), 2)})
+            {'vx': round(speed * round(math.cos(direction), 2), 2)})
         self.add_stats(
-            {'vy': - speed * round(math.sin(direction), 2)})
+            {'vy': round(- speed * round(math.sin(direction), 2), 2)})
 
     def calculate_order(self) -> Tuple[float, float, int, int, int, int]:
         x_d = abs(self.get_stat('vx'))
@@ -208,14 +208,15 @@ class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
                             current: int) \
             -> Tuple[float, float]:
         """ Increment the position of the particle in given direction """
-        vel = 'v' + direction
+        vel = self.get_stat('v' + direction)
+
         for i in range(time):
             if total > 0:
                 if total >= 1:
-                    value = self.get_stat(vel) / abs(self.get_stat(vel))
+                    value = vel / abs(vel)
                     total -= 1
                 else:
-                    value = self.get_stat(vel) - int(self.get_stat(vel))
+                    value = vel - int(vel)
                     total = 0
                 setattr(self, direction, getattr(self, direction) + value)
                 self.update_map_position()

@@ -210,10 +210,10 @@ class Collidable(Positional, BufferedStats):
 
     def _square_square(self, other: Collidable) -> bool:
         """ Collision Detection between two squares """
-        c1x = round(self.x, 0)
-        c1y = round(self.y, 0)
-        c2x = round(other.x, 0)
-        c2y = round(other.y, 0)
+        c1x = int(self.x)
+        c1y = int(self.y)
+        c2x = int(other.x)
+        c2y = int(other.y)
         if c1x <= c2x - self.diameter:
             return False
         if c1y <= c2y - self.diameter:
@@ -226,10 +226,10 @@ class Collidable(Positional, BufferedStats):
 
     def _square_circle(self, other: Collidable) -> bool:
         radius = other.diameter / 2
-        c1x = round(self.x, 0)
-        c1y = round(self.y, 0)
-        c2x = round(other.x, 0) + radius - 1
-        c2y = round(other.y, 0) + radius - 1
+        c1x = int(self.x)
+        c1y = int(self.y)
+        c2x = int(other.x) + radius - 1
+        c2y = int(other.y) + radius - 1
 
         if c1x > c2x:
             if c1y > c2y:
@@ -251,12 +251,12 @@ class Collidable(Positional, BufferedStats):
 
     def _circle_circle(self, other: Collidable) -> bool:
         r1 = self.diameter / 2
-        cx1 = self.x + r1 - 1
-        cy1 = self.y + r1 - 1
+        cx1 = int(self.x + r1 - 1)
+        cy1 = int(self.y + r1 - 1)
 
         r2 = other.diameter / 2
-        cx2 = other.x + r2 - 1
-        cy2 = other.y + r2 - 1
+        cx2 = int(other.x + r2 - 1)
+        cy2 = int(other.y + r2 - 1)
         return math.sqrt(pow(cx1 - cx2, 2) + pow(cy1 - cy2, 2)) < (r1 + r2)
 
     def _circle_square(self, other: Collidable) -> bool:

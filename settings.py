@@ -1,7 +1,7 @@
 SCREEN_SIZE = (1200, 900)
 ICON = 'Lobster.png'
 CAPTION = 'Lobster Remake'
-FPS = 60
+FPS = 160
 TILE_SIZE = 96
 IMAGE_PATH = "assets/images"
 MAP_PATH = "assets/maps"
@@ -15,8 +15,9 @@ SHAPES = [SQUARE, CIRCLE]
 PLACE_HOLDER = 'self.'
 EMPTY_CONDITION = 'empty'
 
-# surrounding detection
-DEFAULT_DETECTION_RADIUS = 1
+#
+MAX_CAMERA_SCALE = 1.5
+MIN_CAMERA_SCALE = 0.75
 
 # particle attributes
 DEFAULT_DISPLAY_PRIORITY = 0
