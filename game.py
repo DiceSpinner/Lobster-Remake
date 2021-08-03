@@ -11,6 +11,7 @@ from predefined_particle import PredefinedParticle
 from settings import *
 from data_structures import PriorityQueue
 from error import CollidedParticleNameError
+from particle_actions import Fireball
 import os
 
 
@@ -29,12 +30,8 @@ class GameMap:
     tile_size: int
     width: int
     height: int
-    all_blocks: List[Block]
-    blocks: List[List[Block]]
-    all_entities: List[Union[Creature, Item]]
-    entities: List[List[List[Union[Creature, Item]]]]
-    collision_boxs: List[List[List[CollisionBox]]]
-    all_collision_boxs: List[CollisionBox]
+    all_particles: set[int]
+    content: List[List[Set[int]]]
 
     def __init__(self, location: str,
                  look_up: dict[str, PredefinedParticle]) -> None:
@@ -45,25 +42,17 @@ class GameMap:
             self.name = info[0]
             self.width = int(info[1])
             self.height = int(info[2])
-
             rows = lines[1:]
-            self.blocks = []
-            self.entities = []
-            self.collision_boxs = []
-            self.all_blocks = []
-            self.all_entities = []
-            self.all_collision_boxs = []
+            self.all_particles = set()
+            self.content = [[set() for j in range(self.width)]
+                            for i in range(self.height)]
+            Particle.game_map[self.name] = self.content
             for i in range(len(rows)):
                 pos_y = i * TILE_SIZE
                 row = rows[i].rstrip()
-                self.blocks.append([])
-                self.entities.append([])
-                self.collision_boxs.append([])
                 row = row.split("	")
                 for j in range(len(row)):
                     pos_x = j * TILE_SIZE
-                    self.entities[i].append([])
-                    self.collision_boxs[i].append([])
                     col = row[j].split('_')
                     for particle in col:
                         pre_p = look_up[particle]
@@ -71,80 +60,19 @@ class GameMap:
                         pre_p.info['y'] = pos_y
                         pre_p.info['map_name'] = self.name
                         particle_class = globals()[pre_p.info['class']]
-                        par = particle_class(pre_p.info.copy())
-                        if isinstance(par, Block):
-                            self.blocks[i].append(par)
-                            self.all_blocks.append(par)
-                        elif isinstance(par, Creature) or isinstance(par, Item):
-                            self.entities[i][j].append(par)
-                            self.all_entities.append(par)
-                        else:
-                            self.collision_boxs[i][j].append(par)
-                            self.all_collision_boxs.append(par)
+                        particle_class(pre_p.info.copy())
 
-    def clear_content(self):
-        for i in range(self.height):
-            for j in range(self.width):
-                self.entities[i][j] = []
-                self.collision_boxs[i][j] = []
+    def update_contents(self) -> None:
+        for particle in self.all_particles.copy():
+            if particle not in Particle.particle_group or \
+                 not Particle.particle_group[particle].map_name == self.name:
+                self.all_particles.remove(particle)
 
-    def update_contents(self):
-        self.clear_content()
-        ep = []
-        cp = []
-        for entity in self.all_entities:
-            if entity.id not in Particle.particle_group or not \
-                    entity.map_name == self.name:
-                ep.append(entity)
-                continue
-            col = int((entity.x - 1 + entity.diameter / 2) // TILE_SIZE)
-            row = int((entity.y - 1 + entity.diameter / 2) // TILE_SIZE)
-            self.entities[row][col].append(entity)
-
-        for cb in self.all_collision_boxs:
-            if cb.id not in Particle.particle_group or not \
-                    cb.map_name == self.name:
-                cp.append(cb)
-                continue
-            col = int((cb.x - 1 + cb.diameter / 2) // TILE_SIZE)
-            row = int((cb.y - 1 + cb.diameter / 2) // TILE_SIZE)
-            self.collision_boxs[row][col].append(cb)
-        for item in ep:
-            self.all_entities.remove(item)
-        for item in cp:
-            self.all_collision_boxs.remove(item)
-
-    def update_surroundings(self, particle: Particle) -> None:
-        """ Feed the map info to the selected particle """
-        if isinstance(particle, Collidable):
-            cx = particle.x - 1 + particle.diameter / 2
-            cy = particle.y - 1 + particle.diameter / 2
-        else:
-            cx = particle.x
-            cy = particle.y
-        col = int(cx // TILE_SIZE)
-        row = int(cy // TILE_SIZE)
-        start_col = col - particle.detection_radius
-        end_col = col + particle.detection_radius
-        start_row = row - particle.detection_radius
-        end_row = row + particle.detection_radius
-        if start_row < 0:
-            start_row = 0
-        if end_row >= self.height:
-            end_row = self.height - 1
-        if start_col < 0:
-            start_col = 0
-        if end_col >= self.width:
-            end_col = self.width - 1
-        tiles = {}
-        entities = {}
-        for i in range(start_row, end_row + 1):
-            entities[i] = {}
-            tiles[i] = {}
-            for j in range(start_col, end_col + 1):
-                entities[i][j] = self.entities[i][j][:]
-                tiles[i][j] = self.blocks[i][j]
-        particle.update_surroundings(tiles, entities)
+        for new_particle in Particle.new_particles.copy():
+            p = Particle.particle_group[new_particle]
+            if p.map_name == self.name:
+                self.all_particles.add(p.id)
+            Particle.new_particles.pop(new_particle, None)
 
 
 class Camera(Positional):
@@ -160,6 +88,7 @@ class Camera(Positional):
     - min_x: minimum y-coordinate of the camera on the current map
     - min_y: minimum y-coordinate of the camera on the current map
     """
+    shades = {}
     game_maps: dict[str, GameMap]
     height: int
     width: int
@@ -186,15 +115,15 @@ class Camera(Positional):
         Synchronize the position of this camera with the particle
         """
         self.map_name = self.particle.map_name
-        self.x = self.particle.x - self.width / 2
-        self.y = self.particle.y - self.height / 2
-        if isinstance(self.particle, Creature):
-            self.x += self.particle.diameter / 2
-            self.y += self.particle.diameter / 2
+        radius = self.particle.diameter / 2
+        self.x = math.ceil(self.particle.x + radius - self.width / 2 /
+                           Particle.Scale)
+        self.y = math.ceil(self.particle.y + radius - self.height / 2 /
+                           Particle.Scale)
         current_map = self.game_maps[self.map_name]
-        tile_size = current_map.tile_size
-        self.max_x = current_map.width * tile_size - self.width
-        self.max_y = current_map.height * tile_size - self.height
+        self.max_x = current_map.width * TILE_SIZE - self.width / Particle.Scale
+        self.max_y = current_map.height * TILE_SIZE - self.height / \
+                     Particle.Scale
         if self.x > self.max_x:
             self.x = self.max_x
         elif self.x < self.min_x:
@@ -207,70 +136,59 @@ class Camera(Positional):
     def display(self, screen: pygame.Surface):
         """ Display the content onto the screen by their priority
         """
+        size = TILE_SIZE * Particle.Scale
         current_map = self.game_maps[self.map_name]
-        displaying = {}
-        start_row = int(self.x // TILE_SIZE)
-        end_row = int(math.ceil((self.x + self.width) / TILE_SIZE))
-        start_col = int(self.y // TILE_SIZE)
-        end_col = int(math.ceil((self.y + self.height) / TILE_SIZE))
+        displaying = set()
+        start_row = int(self.y // TILE_SIZE)
+        first_tile_pixel = math.ceil((start_row * TILE_SIZE - self.y) *
+                                     Particle.Scale)
+        end_row = start_row + math.ceil((self.height - first_tile_pixel) / size)
+        start_col = int(self.x // TILE_SIZE)
+        first_tile_pixel = math.ceil((start_col * TILE_SIZE - self.x) *
+                                     Particle.Scale)
+        end_col = start_col + math.ceil((self.width - first_tile_pixel) / size)
+        shades = set()
         # add tiles & entities to the queue
         for i in range(start_row, end_row):
             for j in range(start_col, end_col):
-                tile = current_map.blocks[j][i]
-                items = []
-                if tile.get_stat('brightness') > 0:
-                    items.append(tile)
-                    items += current_map.entities[j][i]
-                    items += current_map.collision_boxs[j][i]
-                else:
-                    tiles = tile.get_adjacent_tiles()
-                    for t in tiles:
-                        if t.get_stat('brightness') > 0:
-                            for entity in current_map.entities[j][i]:
-                                if entity.detect_collision(t):
-                                    items.append(entity)
-                                for cb in current_map.collision_boxs[j][i]:
-                                    if cb.detect_collision(t):
-                                        items.append(cb)
-                            break
-
-                for item in items:
-                    display_x = round(item.x - self.x)
-                    display_y = round(item.y - self.y)
-                    displaying[item.id] = (display_x, display_y)
-        queue = PriorityQueue(compare_by_display_priority)
-
+                ps = current_map.content[i][j]
+                for idti in ps:
+                    item = Particle.particle_group[idti]
+                    display_x = int((item.x - self.x) * Particle.Scale)
+                    display_y = int((item.y - self.y) * Particle.Scale)
+                    if idti not in Block.block_group:
+                        flag = False
+                        tiles = item.get_tiles_in_contact()
+                        for t in tiles:
+                            if t.get_stat("brightness") > 0:
+                                flag = True
+                        if flag:
+                            displaying.add((idti, display_x, display_y))
+                    else:
+                        if item.get_stat("brightness") > 0:
+                            displaying.add((idti, display_x, display_y))
+                            tiles = get_particles_in_radius(item, 1, Block,
+                                                            True)
+                            for t in tiles:
+                                tx = int((t.x - self.x) * Particle.Scale)
+                                ty = int((t.y - self.y) * Particle.Scale)
+                                shades.add(((tx, ty), 255 -
+                                            t.get_stat("brightness")))
+        queue = PriorityQueue(priority_over_id)
+        new_dict = {}
+        for item in displaying:
+            new_dict[item[0]] = (item[1], item[2])
         # display items by their priority
-        for key in displaying:
-            queue.enqueue(Particle.particle_group[key])
+        for item in new_dict:
+            queue.enqueue(Particle.particle_group[item])
         while not queue.is_empty():
             item = queue.dequeue()
-            item.display(screen, displaying[item.id])
-
+            item.display(screen, new_dict[item.id])
         # display brightness
-        # font = pygame.font.Font(None, 25)
-        for i in range(start_row, end_row):
-            for j in range(start_col, end_col):
-                tile = current_map.blocks[j][i]
-                dark = pygame.Surface((TILE_SIZE,
-                                       TILE_SIZE))
-                dark.fill((0, 0, 0))
-                adjacent = tile.get_adjacent_tiles(True)
-                flag = False
-                for t in adjacent:
-                    if t.get_stat("brightness") > 0:
-                        flag = True
-                        break
-                if tile.get_stat('brightness') > 0 or flag:
-                    if tile.get_stat('brightness') > 0:
-                        dark.set_alpha(255 - tile.get_stat('brightness'))
-                    display_x = round(tile.x - self.x)
-                    display_y = round(tile.y - self.y)
-                    screen.blit(dark, (display_x, display_y))
-                    # num = font.render(str(tile.get_stat('brightness')), True,
-                    #                  (255, 255, 0))
-                    # screen.blit(num, (display_x + tile.diameter // 3,
-                    # display_y + tile.diameter // 3))
+        for s in shades:
+            location = s[0]
+            shade = get_shade(s[1])
+            screen.blit(shade, location)
 
 
 class Level:
@@ -359,69 +277,70 @@ class Level:
             self.difficulty = difficulty
             player_key = list(Player.player_group)[0]
             player = Player.player_group[player_key]
+            # npc_key = list(NPC.npc_group)[0]
+            # npc = NPC.npc_group[npc_key]
             self._camera = Camera(player,
                                   screen.get_height(), screen.get_width(),
                                   self._game_maps)
         player_key = list(Player.player_group)[0]
         player = Player.player_group[player_key]
-        player_input = []
         # mouse tracking
         mouse_pos = pygame.mouse.get_pos()
         pos = Positional({})
-        pos.x = mouse_pos[0] + self._camera.x
-        pos.y = mouse_pos[1] + self._camera.y
+        pos.x = mouse_pos[0] / Particle.Scale + self._camera.x
+        pos.y = mouse_pos[1] / Particle.Scale + self._camera.y
         player.aim(pos)
         # player input and other game actions
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            elif event.type == pygame.KEYUP or event.type == pygame.KEYDOWN or \
-                    event.type == pygame.MOUSEBUTTONDOWN:
-                player_input.append(event)
-
-        # creature actions
-        for creature in Creature.creature_group.copy():
-            Creature.creature_group[creature].action(player_input)
-
+        pressed_keys = pygame.key.get_pressed()
+        if pressed_keys[pygame.K_UP]:
+            Particle.Scale += 0.01
+            if Particle.Scale > MAX_CAMERA_SCALE:
+                Particle.Scale = MAX_CAMERA_SCALE
+        if pressed_keys[pygame.K_DOWN]:
+            Particle.Scale -= 0.01
+            if Particle.Scale < MIN_CAMERA_SCALE:
+                Particle.Scale = MIN_CAMERA_SCALE
+        active_map = self._game_maps[player.map_name]
+        active_particles = get_particles_in_radius(player, 12, None, True)
         # particle status update
-        for particle in Particle.particle_group.copy():
-            particle = Particle.particle_group[particle]
-            if isinstance(particle, Living):
-                if particle.is_dead():
-                    particle.die()
-                    continue
-            if isinstance(particle, Item) or isinstance(particle, Creature):
-                if particle not in \
-                        self._game_maps[particle.map_name].all_entities:
-                    self._game_maps[particle.map_name].all_entities.append(
-                        particle)
-            if isinstance(particle, CollisionBox):
-                if particle not in \
-                        self._game_maps[particle.map_name].all_collision_boxs:
-                    self._game_maps[
-                        particle.map_name].all_collision_boxs.append(particle)
-            if isinstance(particle, Staminaized):
-                particle.count()
-            if isinstance(particle, CollisionBox):
-                CollisionBox.count(particle)
-                particle.sync()
+        living = []
+        creature = []
+        tiles = []
+        for particle in active_particles:
+            # particle = Particle.particle_group[particle]
             if isinstance(particle, Regenable):
                 particle.regen()
+            if isinstance(particle, Creature):
+                # queue up actions
+                particle.action()
+                creature.append(particle)
+            if isinstance(particle, Living):
+                living.append(particle)
+            if isinstance(particle, Staminaized):
+                particle.cooldown_countdown()
+            if isinstance(particle, Block):
+                tiles.append(particle)
 
-        # update entity surroundings
-        for game_map in self._game_maps:
-            self._game_maps[game_map].update_contents()
-        for particle in Particle.particle_group:
-            particle = Particle.particle_group[particle]
-            self._game_maps[particle.map_name].update_surroundings(particle)
+        # execute particle actions
+        for i in range(Staminaized.action_queue.get_size()):
+            particle, args, name = Staminaized.action_queue.dequeue()
+            particle.execute_movement(name, args)
+        Staminaized.action_queue.reset()
+
+        for particle in living:
+            particle.calculate_health()
+            if particle.is_dead():
+                particle.die()
+        active_map.update_contents()
 
         # lighting
-        for creature in Creature.creature_group:
-            creature = Creature.creature_group[creature]
+        for creature in creature:
             if creature.get_stat('light_source') > 0 and creature.light_on:
                 creature.light()
-        for block in Block.block_group:
-            block = Block.block_group[block]
+        for block in tiles:
             if block.get_stat('light_source') > 0:
                 block.light()
 
@@ -459,7 +378,7 @@ class Level:
 
         mana_percent = player.mana / player.max_mana
         mana_bar = pygame.Surface((mana_percent * resource_bar_width,
-                                    resource_bar_height))
+                                   resource_bar_height))
         mana_bar.fill((0, 255, 255))
         screen.blit(self.texts['resource_bar'], (80, 140))
         screen.blit(mana_bar, (80, 160))
@@ -549,9 +468,21 @@ class Game:
         pygame.quit()
 
 
+def compare_by_id(p1: Particle, p2: Particle) -> bool:
+    """ Sort by non-decreasing order """
+    return p1.id > p2.id
+
+
 def compare_by_display_priority(p1: Particle, p2: Particle) -> bool:
     """ Sort by non-decreasing order """
-    return p2.display_priority > p1.display_priority
+    return p1.display_priority > p2.display_priority
+
+
+def priority_over_id(p1: Particle, p2: Particle) -> bool:
+    """ Sort by non-decreasing order """
+    if p1.display_priority == p2.display_priority:
+        return p1.id > p2.id
+    return p1.display_priority > p2.display_priority
 
 
 def _load_assets():
@@ -559,11 +490,31 @@ def _load_assets():
     path = "assets/images"
     paths = os.listdir(path)
     for p in paths:
-        Particle.textures[p] = pygame.image.load(
+        pic = pygame.image.load(
             os.path.join(path, p)).convert_alpha()
-        Particle.rotation[p] = {}
+        Particle.raw_textures[p] = pic
+        # Loaded textures are being accessed by 4 parameters
+        # in the order of name -> size -> direction -> alpha value
+        tup = (p, pic.get_size(), 0, 0)
+        Particle.textures[tup] = pic
     path = "assets/sounds"
     paths = os.listdir(path)
     for p in paths:
         Particle.sounds[p] = pygame.mixer.Sound(os.path.join(path, p))
 
+
+def get_shade(alpha: int) -> pygame.Surface:
+    """ Return the shade with the given alpha value """
+    try:
+        return Camera.shades[Particle.Scale][alpha].copy()
+    except KeyError:
+        size = int(round(Particle.Scale * TILE_SIZE))
+        surface = pygame.Surface((size, size))
+        surface.fill((0, 0, 0))
+        surface.set_alpha(alpha)
+        try:
+            Camera.shades[Particle.Scale][alpha] = surface
+        except KeyError:
+            Camera.shades[Particle.Scale] = {}
+            Camera.shades[Particle.Scale][alpha] = surface
+        return surface.copy()

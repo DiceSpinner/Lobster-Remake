@@ -1,10 +1,19 @@
 from __future__ import annotations
 from typing import Union, List, Optional, Any, Tuple, Callable
-from error import UnknownShapeError, UnknownStaminaCostError, \
-    UnknownManaCostError, UnknownCooldownError, InvalidAttrTypeError
+from error import UnknownShapeError, InvalidAttrTypeError
 from bool_expr import BoolExpr, construct_from_list, construct_from_str
 from settings import *
+from data_structures import WeightedPriorityQueue
 import math
+
+
+def compare_by_execution_priority(i1: Tuple[Staminaized, dict[str, Any], str],
+                                  i2: Tuple[Staminaized, dict[str, Any], str])\
+        -> bool:
+    """ Sort by non-decreasing order """
+    a1 = i1[0].actions[i1[2]]
+    a2 = i2[0].actions[i2[2]]
+    return a1.action_priority < a2.action_priority
 
 
 class BufferedStats:
@@ -34,23 +43,24 @@ class BufferedStats:
                 elif isinstance(self._buffer_stats[data], str) and \
                         isinstance(info[data], str):
                     self._buffer_stats[data] = info[data]
-                elif is_numeric(self._buffer_stats[data]) and \
-                        is_numeric(info[data]):
+                elif (isinstance(self._buffer_stats[data], int) or
+                      isinstance(self._buffer_stats[data], float)) and \
+                        (isinstance(info[data], int) or isinstance(info[data],
+                                                                   float)):
                     self._buffer_stats[data] += info[data]
                 else:
                     raise InvalidAttrTypeError
 
     def get_stat(self, item: str) -> Any:
-        if item in self._buffer_stats:
-            v1 = getattr(self, item)
+        v1 = getattr(self, item)
+        try:
             v2 = self._buffer_stats[item]
-            if not is_numeric(v1) and not is_numeric(v2):
+            f2 = isinstance(v2, int) or isinstance(v2, float)
+            if not f2:
                 return v2
-            elif is_numeric(v1) and is_numeric(v2):
-                return v1 + v2
-            raise InvalidAttrTypeError
-        else:
-            return getattr(self, item)
+            return v1 + v2
+        except KeyError:
+            return v1
 
     def reset(self):
         self._buffer_stats = {}
@@ -79,9 +89,8 @@ class Positional(BufferedStats):
         super().__init__(info)
 
 
-class Movable(Positional, BufferedStats):
-    """ An interface that provides movement methods in addition to positional
-        attributes.
+class Movable(BufferedStats):
+    """ An interface that provides movement attributes.
 
     === Public Attributes ===
     - vx: Velocity of the object in x-direction
@@ -113,24 +122,6 @@ class Movable(Positional, BufferedStats):
         for item in info:
             if item in attr:
                 setattr(self, item, info[item])
-
-    def update_position(self) -> None:
-        """
-        Update the object's position.
-        """
-        raise NotImplementedError
-
-    def move(self, direction: Union[float, Positional]) -> None:
-        """ Move towards the target direction or object """
-        if isinstance(direction, Positional):
-            direction = get_direction((self.x, self.y), (direction.x,
-                                                         direction.y))
-        direction = math.radians(direction)
-        speed = self.get_stat('speed') / FPS
-        self.add_stats(
-            {'vx': speed * round(math.cos(direction), 2)})
-        self.add_stats(
-            {'vy': - speed * round(math.sin(direction), 2)})
 
 
 class Directional(Positional):
@@ -219,10 +210,10 @@ class Collidable(Positional, BufferedStats):
 
     def _square_square(self, other: Collidable) -> bool:
         """ Collision Detection between two squares """
-        c1x = round(self.x, 0)
-        c1y = round(self.y, 0)
-        c2x = round(other.x, 0)
-        c2y = round(other.y, 0)
+        c1x = int(self.x)
+        c1y = int(self.y)
+        c2x = int(other.x)
+        c2y = int(other.y)
         if c1x <= c2x - self.diameter:
             return False
         if c1y <= c2y - self.diameter:
@@ -235,10 +226,10 @@ class Collidable(Positional, BufferedStats):
 
     def _square_circle(self, other: Collidable) -> bool:
         radius = other.diameter / 2
-        c1x = round(self.x, 0)
-        c1y = round(self.y, 0)
-        c2x = round(other.x, 0) + radius - 1
-        c2y = round(other.y, 0) + radius - 1
+        c1x = int(self.x)
+        c1y = int(self.y)
+        c2x = int(other.x) + radius - 1
+        c2y = int(other.y) + radius - 1
 
         if c1x > c2x:
             if c1y > c2y:
@@ -260,12 +251,12 @@ class Collidable(Positional, BufferedStats):
 
     def _circle_circle(self, other: Collidable) -> bool:
         r1 = self.diameter / 2
-        cx1 = self.x + r1 - 1
-        cy1 = self.y + r1 - 1
+        cx1 = int(self.x + r1 - 1)
+        cy1 = int(self.y + r1 - 1)
 
         r2 = other.diameter / 2
-        cx2 = other.x + r2 - 1
-        cy2 = other.y + r2 - 1
+        cx2 = int(other.x + r2 - 1)
+        cy2 = int(other.y + r2 - 1)
         return math.sqrt(pow(cx1 - cx2, 2) + pow(cy1 - cy2, 2)) < (r1 + r2)
 
     def _circle_square(self, other: Collidable) -> bool:
@@ -302,19 +293,6 @@ class Lightable(BufferedStats):
         for a in attr:
             setattr(self, a, info[a])
         super().__init__(info)
-
-    def enlighten(self, other: Lightable) -> None:
-        """ Raise self and other lightable object's brightness """
-        if self.get_stat('brightness') < self.get_stat('light_source'):
-            self.add_stats({'brightness': self.get_stat('light_source') -
-                                          self.get_stat('brightness')})
-        light_level = self.get_stat('brightness') - \
-                      self.get_stat('light_resistance')
-        if light_level < 0:
-            return
-        if light_level > other.get_stat('brightness'):
-            other.add_stats({'brightness': light_level -
-                                           other.get_stat('brightness')})
 
 
 class Regenable(BufferedStats):
@@ -375,18 +353,27 @@ class Living(Regenable):
     - health: The health of the object
     - max_health: The maximum hit points of the object
     - death: Whether this object is dead
+    - incoming_damage: The amount of damage this unit will take during the
+        current frame
+    - incoming_healing: The amount of healing this unit will receive during the
+        current frame
     """
     health: float
     max_health: float
     death: BoolExpr
+    incoming_damage: float
+    incoming_healing: float
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
-        attr = ['health', 'max_health', 'death']
+        attr = ['health', 'max_health', 'death', 'incoming_damage',
+                'incoming_healing']
         default = {
             'health': DEFAULT_HEALTH,
             'health_regen': DEFAULT_HEALTH_REGEN,
             'max_health': DEFAULT_MAX_HEALTH,
-            'death': construct_from_str("( not health > 0 )")
+            'death': construct_from_str("( not health > 0 )"),
+            'incoming_damage': 0,
+            'incoming_healing': 0
         }
         for key in default:
             if key not in info:
@@ -397,9 +384,18 @@ class Living(Regenable):
 
     def calculate_health(self) -> None:
         """ Update health with value changes in the buffer """
-        self.health = self.get_stat('health')
-        if 'health' in self._buffer_stats:
-            self._buffer_stats['health'] = 0
+        heal = self.get_stat("incoming_healing")
+        damage = self.get_stat("incoming_damage")
+        if heal > 0:
+            self.health += heal
+        if damage > 0:
+            self.health -= damage
+
+    def register_damage(self, damage: float) -> None:
+        self.add_stats({"incoming_damage": damage})
+
+    def register_healing(self, healing: float) -> None:
+        self.add_stats({"incoming_healing": healing})
 
     def is_dead(self) -> bool:
         """ Check whether this object is dead """
@@ -409,29 +405,74 @@ class Living(Regenable):
         raise NotImplementedError
 
 
-class Staminaized(Regenable):
-    """ Interface that provides access to advanced movements
+class Action:
+    """ An action that particles can perform
 
     === Public Attributes ===
-    - stamina: The required stats to perform advanced movements
-    - max_stamina: The maximum amount of stamina this unit can have
-    - stamina_costs: The collection of the cost of all staminaized actions
-    - actions: The collection of all actions this unit can perform
-    - action_cooldown: The collection of the cooldowns of the actions of
-        this unit
-    - action_textures: Names of assets of Visual Displays of actions
+    - name: Name of this action
+    - stamina_cost: Stamina cost of this action
+    - mana_cost: Mana cost of this action
+    - cooldown: Cooldown of this action
+    - time: The amount of frames this action is going to last
+    - action_priority: The execution priority of this action
+    - action_texture: Names of assets of Visual Displays of this action
+    - executing: Timer for this action while executing.
 
     === Private Attributes ===
-    - _cooldown_counter: The collection of the counter of the cooldowns of the
-        spells of this unit
+    - _cooldown_counter: The counter of the cooldown
     """
+    name: str
+    cooldown: float
+    action_time: int
+    action_priority: int
+    action_texture: str
+    _cooldown_counter: int
+    method: Callable
+    executing: int
+
+    def __init__(self, info: dict[str, Any]) -> None:
+        self.name = info['name']
+        self.cooldown = info['cooldown']
+        self._cooldown_counter = self.cooldown * FPS
+        self.action_priority = info['priority']
+        self.action_time = math.ceil(info['time'])
+        self.method = info['method']
+        self.executing = 0
+        if 'texture' in info:
+            self.action_texture = info['texture']
+
+    def can_act(self) -> bool:
+        if self.executing == 0:
+            # Check if the action is on cooldown
+            if self._cooldown_counter < self.cooldown * FPS:
+                return False
+            return True
+        return False
+
+    def count(self):
+        if self._cooldown_counter < self.cooldown * FPS:
+            self._cooldown_counter += 1
+
+    def execute(self, args: dict[str, Any]):
+        self.method(**args)
+        self._cooldown_counter = 0
+        self.executing -= 1
+
+
+class Staminaized(Regenable):
+    """ Interface that provides access to actions
+
+    === Public Attributes ===
+    - stamina: The required stats to perform actions
+    - max_stamina: The maximum amount of stamina this unit can have
+    - actions: All actions this unit can perform
+    """
+
+    action_queue = WeightedPriorityQueue(compare_by_execution_priority)
     stamina: float
     max_stamina: float
+    actions: dict[str, Action]
     stamina_costs: dict[str, float]
-    actions: dict[str, Callable]
-    action_cooldown: dict[str, float]
-    action_textures: dict[str, str]
-    _cooldown_counter: dict[str, float]
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
         attr = ['stamina', 'max_stamina']
@@ -442,9 +483,6 @@ class Staminaized(Regenable):
         }
         self.actions = {}
         self.stamina_costs = {}
-        self.action_cooldown = {}
-        self.action_textures = {}
-        self._cooldown_counter = {}
         for key in default:
             if key not in info:
                 info[key] = default[key]
@@ -454,32 +492,28 @@ class Staminaized(Regenable):
 
     def can_act(self, name: str) -> bool:
         """ Return whether the given action can be performed """
-        if name in self.actions:
-            # Check if the action is on cooldown
-            if name in self.action_cooldown:
-                if self._cooldown_counter[name] < self.action_cooldown[name] * \
-                        FPS:
-                    return False
+        action = self.actions[name]
+        if action.can_act():
             # Stamina check
-            if name in self.stamina_costs:
-                return self.stamina >= self.stamina_costs[name]
-            raise UnknownStaminaCostError
+            return self.stamina >= self.stamina_costs[name]
         return False
 
-    def count(self) -> None:
-        """ Increase the cooldown counter by 1 per frame. """
-        for counter in self.action_cooldown:
-            value = self.action_cooldown[counter] * FPS
-            if self._cooldown_counter[counter] < value:
-                self._cooldown_counter[counter] += 1
+    def cooldown_countdown(self) -> None:
+        """ Increase the cooldown counter of actions by 1 per frame. """
+        for name in self.actions:
+            self.actions[name].count()
 
-    def perform_act(self, name: str, *args: Optional) -> None:
-        """ Execute the given action """
+    def enqueue_movement(self, name: str, args: dict[str, Any]) -> None:
+        """ Add the action to the action queue """
         if self.can_act(name):
-            # consume resource if successfully executed movements
-            self.actions[name](*args)
+            Staminaized.action_queue.enqueue((self, args, name),
+                                             self.actions[name].action_time)
+            self.actions[name].executing = self.actions[name].action_time
             self.resource_consume(name)
-            self._cooldown_counter[name] = 0
+
+    def execute_movement(self, name: str, args: dict[str, Any]):
+        """ Execute movements in self.executing """
+        self.actions[name].execute(args)
 
     def resource_consume(self, name: str):
         """ Consume the resource for performing this action """
@@ -492,16 +526,19 @@ class Staminaized(Regenable):
             1. name of the action accessed by "name"
             2. stamina cost of the action accessed by "stamina_cost"
             3. cooldown of the action accessed by "cooldown"
+            4. Length of the action accessed by "time"
+            5. Execution priority of this action accessed by "priority"
+            6. method reference of this action accessed by "method"
 
         Optional:
             1. Texture of the action accessed by "texture"
         """
-        self.actions[info['name']] = getattr(self, info['name'])
-        self.stamina_costs[info['name']] = info['stamina_cost']
-        self.action_cooldown[info['name']] = info['cooldown']
-        self._cooldown_counter[info['name']] = 0
+        name = info['name']
+        act = Action(info)
+        self.stamina_costs[name] = info['stamina_cost']
+        self.actions[name] = act
         if 'texture' in info:
-            self.action_textures[info['name']] = info['texture']
+            self.actions[name].action_texture = info['texture']
 
 
 class Manaized(Staminaized):
@@ -510,7 +547,7 @@ class Manaized(Staminaized):
     === Public Attributes ===
     - mana: The required stats to perform manaized movements
     - max_mana: The maximum amount of mana this unit can have
-    - mana_costs: The collection of the cost of all staminaized actions
+    - mana_costs: The mana costs of all actions
     """
     mana: float
     max_mana: float
@@ -523,20 +560,18 @@ class Manaized(Staminaized):
             'max_mana': DEFAULT_MAX_MANA,
             'mana_regen': DEFAULT_MANA_REGEN
         }
-        self.mana_costs = {}
         for key in default:
             if key not in info:
                 info[key] = default[key]
         for a in attr:
             setattr(self, a, info[a])
+        self.mana_costs = {}
         super().__init__(info)
 
     def can_act(self, name: str) -> bool:
         """ Return whether the given action can be performed """
         if Staminaized.can_act(self, name):
-            if name in self.mana_costs:
-                return self.mana >= self.mana_costs[name]
-            raise UnknownManaCostError
+            return self.mana >= self.mana_costs[name]
         return False
 
     def resource_consume(self, name: str):
@@ -550,26 +585,33 @@ class Manaized(Staminaized):
         Pre-condition: info contains all of the following
             1. name of the action accessed by "name"
             2. stamina cost of the action accessed by "stamina_cost"
-            3. mana cost of the action accessed by "mana_cost"
-            4. cooldown of the action accessed by "cooldown"
+            3. cooldown of the action accessed by "cooldown"
+            4. Length of the action accessed by "time"
+            5. Execution priority of this action accessed by "priority"
+            6. mana cost of the action accessed by "mana_cost"
+            7. method reference of this action accessed by "method"
 
         Optional:
             1. Texture of the action accessed by "texture"
         """
-        Staminaized.add_movement(self, info)
         self.mana_costs[info['name']] = info['mana_cost']
+        Staminaized.add_movement(self, info)
 
 
-class OffensiveStats:
+class CombatStats:
     """ Interface that provides offensive stats
 
     === Public Attributes ===
     - attack_power: The strength of the attack
     - ability_power: Scaling factor for ability strength
+    - defense: Scaling factor for defense effectiveness
+    - active_damage_reduction: Damage reduction for this unit in guarded stance
     """
 
     attack_power: float
     ability_power: float
+    defense: float
+    active_damage_reduction: float
 
     def __init__(self, info: dict[str, Union[int, float]]) -> None:
         self._attack_counter = 0
@@ -631,18 +673,15 @@ def get_direction(obj1: Tuple[float, float], obj2: Tuple[float, float]) \
             value += 360
     return round(value, 1)
 
-def is_numeric(item: Any) -> bool:
-    """ Return whether this item is numeric """
-    return isinstance(item, int) or isinstance(item, float)
 
-def dict_merge(d1: dict[str, Any], d2:dict[str, Any]):
+def dict_merge(d1: dict[str, Any], d2: dict[str, Any]):
     """ Import stats from d2 and merge them inside d1 """
     for item in d2:
         if item not in d1:
             d1[item] = d2[item]
             continue
-        if is_numeric(d2[item]):
-            if is_numeric(d1[item]):
+        if isinstance(d2[item], int) or isinstance(d2[item], float):
+            if isinstance(d1[item], int) or isinstance(d1[item], float):
                 d1[item] += d2[item]
                 continue
             raise InvalidAttrTypeError

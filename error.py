@@ -127,9 +127,18 @@ class UnknownCooldownError(Exception):
 
 
 class InvalidAttrTypeError(Exception):
-    """ Exception raised when the the input type of an attribute is invalid
+    """ Exception raised when the input type of an attribute is invalid
     """
 
     def __str__(self) -> str:
         """ Return a string representation of this error. """
         return 'Invalid attribute type!'
+
+
+class UnknownTextureError(Exception):
+    """ Exception raised when the input texture name is unknown.
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'The given texture name does not exist!'
