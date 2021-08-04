@@ -2,11 +2,11 @@ TestMap 30 30
 W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
-W	P	P	P_PY	P	P	P	P_N	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P_N	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	P	W	W	W	W	W	W	W
-W	P	P	P	P	P	P	W	W	W	P	P_N	P	P	P	P	P	P	P	W	W	W	P	P	P	P	W	W	W	W
-W	P	P	P	P	P	P	P	P	W	P	P	P	P	P	P	P	P	P	W	W	W	P	W	W	W	W	W	W	W
+W	P	P	L	L	L	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	P	W	W	W	W	W	W	W
+W	P	P	L	L	L	P	W	W	W	P	P_N	P	P	P	P	P	P	P	W	W	W	P	P	P	P	W	W	W	W
+W	P	P	L	L	L	P	P	P	W	P	P	P	P	P	P	P	P	P	W	W	W	P	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	W	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	P	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	W	P	P	P	P	P	P	P	P	P	W	W	W	P	P	P	P	W	W	W	W
@@ -23,7 +23,7 @@ W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P_PY	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W

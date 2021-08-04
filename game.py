@@ -116,14 +116,13 @@ class Camera(Positional):
         """
         self.map_name = self.particle.map_name
         radius = self.particle.diameter / 2
-        self.x = math.ceil(self.particle.x + radius - self.width / 2 /
-                           Particle.Scale)
-        self.y = math.ceil(self.particle.y + radius - self.height / 2 /
-                           Particle.Scale)
+        self.x = self.particle.x + radius - self.width / 2 / Particle.Scale
+        self.y = self.particle.y + radius - self.height / 2 / Particle.Scale
         current_map = self.game_maps[self.map_name]
-        self.max_x = current_map.width * TILE_SIZE - self.width / Particle.Scale
-        self.max_y = current_map.height * TILE_SIZE - self.height / \
-                     Particle.Scale
+        self.max_x = current_map.width * TILE_SIZE - math.ceil(self.width /
+                Particle.Scale)
+        self.max_y = current_map.height * TILE_SIZE - math.ceil(self.height /
+                Particle.Scale)
         if self.x > self.max_x:
             self.x = self.max_x
         elif self.x < self.min_x:
@@ -136,27 +135,59 @@ class Camera(Positional):
     def display(self, screen: pygame.Surface):
         """ Display the content onto the screen by their priority
         """
-        size = TILE_SIZE * Particle.Scale
+        size = math.ceil(TILE_SIZE * Particle.Scale)
         current_map = self.game_maps[self.map_name]
         displaying = set()
         start_row = int(self.y // TILE_SIZE)
-        first_tile_pixel = math.ceil((start_row * TILE_SIZE - self.y) *
+        first_tile_pixel_y = math.ceil((self.y - start_row * TILE_SIZE) *
                                      Particle.Scale)
-        end_row = start_row + math.ceil((self.height - first_tile_pixel) / size)
+        offset_y = size - first_tile_pixel_y
+        end_row = start_row + math.ceil((self.height - offset_y) / size)
         start_col = int(self.x // TILE_SIZE)
-        first_tile_pixel = math.ceil((start_col * TILE_SIZE - self.x) *
+        first_tile_pixel_x = math.ceil((self.x - start_col * TILE_SIZE) *
                                      Particle.Scale)
-        end_col = start_col + math.ceil((self.width - first_tile_pixel) / size)
+        offset_x = size - first_tile_pixel_x
+        end_col = start_col + math.ceil((self.width - offset_x) / size)
         shades = set()
+        in_queue = set()
+        begin_x = -first_tile_pixel_x
+        begin_y = -first_tile_pixel_y
         # add tiles & entities to the queue
-        for i in range(start_row, end_row):
-            for j in range(start_col, end_col):
+        row_count = 0
+        for i in range(start_row, end_row + 1):
+            col_count = 0
+            for j in range(start_col, end_col + 1):
                 ps = current_map.content[i][j]
                 for idti in ps:
+                    if idti in in_queue:
+                        continue
+                    in_queue.add(idti)
                     item = Particle.particle_group[idti]
-                    display_x = int((item.x - self.x) * Particle.Scale)
-                    display_y = int((item.y - self.y) * Particle.Scale)
-                    if idti not in Block.block_group:
+                    if isinstance(item, Block):
+                        display_x = begin_x + col_count * size
+                        display_y = begin_y + row_count * size
+                        if item.get_stat("brightness") > 0:
+                            displaying.add((idti, display_x, display_y))
+                            tiles = get_particles_in_radius(item, 1, Block,
+                                                            True)
+                            for t in tiles:
+                                if t.x > item.x:
+                                    dx = display_x + size
+                                elif t.x == item.x:
+                                    dx = display_x
+                                else:
+                                    dx = display_x - size
+                                if t.y > item.y:
+                                    dy = display_y + size
+                                elif t.y == item.y:
+                                    dy = display_y
+                                else:
+                                    dy = display_y - size
+                                shades.add(((dx, dy), 255 -
+                                            t.get_stat("brightness")))
+                    else:
+                        display_x = int((item.x - self.x) * Particle.Scale)
+                        display_y = int((item.y - self.y) * Particle.Scale)
                         flag = False
                         tiles = item.get_tiles_in_contact()
                         for t in tiles:
@@ -164,16 +195,9 @@ class Camera(Positional):
                                 flag = True
                         if flag:
                             displaying.add((idti, display_x, display_y))
-                    else:
-                        if item.get_stat("brightness") > 0:
-                            displaying.add((idti, display_x, display_y))
-                            tiles = get_particles_in_radius(item, 1, Block,
-                                                            True)
-                            for t in tiles:
-                                tx = int((t.x - self.x) * Particle.Scale)
-                                ty = int((t.y - self.y) * Particle.Scale)
-                                shades.add(((tx, ty), 255 -
-                                            t.get_stat("brightness")))
+                col_count += 1
+            row_count += 1
+
         queue = PriorityQueue(priority_over_id)
         new_dict = {}
         for item in displaying:
@@ -508,7 +532,7 @@ def get_shade(alpha: int) -> pygame.Surface:
     try:
         return Camera.shades[Particle.Scale][alpha].copy()
     except KeyError:
-        size = int(round(Particle.Scale * TILE_SIZE))
+        size = math.ceil(Particle.Scale * TILE_SIZE)
         surface = pygame.Surface((size, size))
         surface.fill((0, 0, 0))
         surface.set_alpha(alpha)
