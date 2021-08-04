@@ -1,6 +1,6 @@
 PY
 Player
-diameter~int~40
+diameter~int~41
 shape~str~circle
 solid~bool~True
 attack_range~int~50

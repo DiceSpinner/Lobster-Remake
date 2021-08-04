@@ -163,9 +163,11 @@ class Camera(Positional):
                         continue
                     in_queue.add(idti)
                     item = Particle.particle_group[idti]
+                    block_x = begin_x + col_count * size
+                    block_y = begin_y + row_count * size
                     if isinstance(item, Block):
-                        display_x = begin_x + col_count * size
-                        display_y = begin_y + row_count * size
+                        display_x = block_x
+                        display_y = block_y
                         if item.get_stat("brightness") > 0:
                             displaying.add((idti, display_x, display_y))
                             tiles = get_particles_in_radius(item, 1, Block,
@@ -186,8 +188,10 @@ class Camera(Positional):
                                 shades.add(((dx, dy), 255 -
                                             t.get_stat("brightness")))
                     else:
-                        display_x = int((item.x - self.x) * Particle.Scale)
-                        display_y = int((item.y - self.y) * Particle.Scale)
+                        bx = j * TILE_SIZE
+                        by = i * TILE_SIZE
+                        display_x = block_x + (item.x - bx) * Particle.Scale
+                        display_y = block_y + (item.y - by) * Particle.Scale
                         flag = False
                         tiles = item.get_tiles_in_contact()
                         for t in tiles:
