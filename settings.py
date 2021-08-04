@@ -1,7 +1,7 @@
 SCREEN_SIZE = (1200, 900)
 ICON = 'Lobster.png'
 CAPTION = 'Lobster Remake'
-FPS = 160
+FPS = 60
 TILE_SIZE = 96
 IMAGE_PATH = "assets/images"
 MAP_PATH = "assets/maps"

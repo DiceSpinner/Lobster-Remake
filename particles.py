@@ -65,7 +65,7 @@ class Particle(Collidable):
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
-        d = int(self.get_stat("diameter") * Particle.Scale)
+        d = math.ceil(self.get_stat("diameter") * Particle.Scale)
         texture = get_texture_by_info(self.texture, (d, d), 0, 255)
         screen.blit(texture, location)
 
@@ -127,7 +127,7 @@ class DirectionalParticle(Particle, Directional):
         screen.blit(texture, [cx, cy])
 
     def get_texture(self):
-        d = int(self.get_stat("diameter") * Particle.Scale)
+        d = math.ceil(self.get_stat("diameter") * Particle.Scale)
         return get_texture_by_info(self.texture, (d, d), self.direction, 255)
 
 
@@ -209,7 +209,7 @@ class Creature(DirectionalParticle, Living, Lightable):
                 setattr(self, item, info[item])
 
     def get_texture(self):
-        d = int(self.get_stat("diameter") * Particle.Scale)
+        d = math.ceil(self.get_stat("diameter") * Particle.Scale)
         tup = (self.texture, (d, d), self.direction, 255, self.color)
         try:
             return Creature.creature_textures[tup].copy()
