@@ -7,3 +7,4 @@ solid~bool~True
 texture~str~Lobster_64_0.png
 death~BoolExpr~( not health > 0 )
 color~tuple~(0,255,255)
+speed~float~250

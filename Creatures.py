@@ -4,7 +4,7 @@ from typing import List, Tuple, Union, Optional
 import pygame
 
 
-class Player(StandardMoveSet, ProjectileThrowable, Illuminator):
+class Player(StandardMoveSet, ProjectileThrowable, Illuminator, Creature):
     """
     Description: Player class
 
@@ -72,7 +72,7 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator):
         Player.player_group.pop(self.id, None)
 
 
-class NPC(StandardMoveSet, ProjectileThrowable):
+class NPC(StandardMoveSet, ProjectileThrowable, Creature):
     """ Description: Non-Player Character class
 
     Additional Attributes:
@@ -86,10 +86,8 @@ class NPC(StandardMoveSet, ProjectileThrowable):
         NPC.npc_group[self.id] = self
 
     def action(self) -> None:
-        # self.perform_act('basic_attack')
-        self.direction += 1
-        if self.direction >= 360:
-            self.direction -= 360
+        self.enqueue_movement('basic_attack', {})
+        # self.enqueue_movement("move", {'direction': self.direction})
         # self.enqueue_movement('fireball', {})
 
     def remove(self):
