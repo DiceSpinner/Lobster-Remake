@@ -16,6 +16,18 @@ def compare_by_execution_priority(i1: Tuple[Staminaized, dict[str, Any], str],
     return a1.action_priority < a2.action_priority
 
 
+class UpdateReq:
+    """ Units that requires updates every frame should implement this interface
+
+    """
+
+    def __init__(self, place_holder: Optional[Any]) -> None:
+        pass
+
+    def update_status(self):
+        raise NotImplementedError
+
+
 class BufferedStats:
     """ Objects with buffered stats.
     i.e The actual attack damage the player can deal is the sum of his
@@ -295,7 +307,7 @@ class Lightable(BufferedStats):
         super().__init__(info)
 
 
-class Regenable(BufferedStats):
+class Regenable(BufferedStats, UpdateReq):
     """ Description: Interface that provides access to resource regeneration
 
     === Public Attributes ===
@@ -319,7 +331,7 @@ class Regenable(BufferedStats):
         self.stats_max = []
         for item in info:
             # contracted naming  i.e 'max_health' stands for the threshold for
-            # health attribute
+            # 'health' attribute
             if "max_" in item:
                 self.stats_max.append(item)
             elif '_regen' in item:
@@ -344,6 +356,9 @@ class Regenable(BufferedStats):
                     setattr(self, r, result)
             else:
                 self.regen_stats.remove(r)
+
+    def update_status(self):
+        self.regen()
 
 
 class Living(Regenable):
@@ -400,6 +415,12 @@ class Living(Regenable):
     def is_dead(self) -> bool:
         """ Check whether this object is dead """
         return self.get_stat('death').eval(vars(self))
+
+    def update_status(self):
+        Regenable.update_status(self)
+        self.calculate_health()
+        if self.is_dead():
+            self.die()
 
     def die(self):
         raise NotImplementedError
@@ -539,6 +560,10 @@ class Staminaized(Regenable):
         self.actions[name] = act
         if 'texture' in info:
             self.actions[name].action_texture = info['texture']
+
+    def update_status(self):
+        Regenable.update_status(self)
+        self.cooldown_countdown()
 
 
 class Manaized(Staminaized):

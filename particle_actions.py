@@ -1,17 +1,40 @@
 import pygame
 import math
-from particles import Creature, Particle, colliding_tiles_generator, \
-    get_nearby_particles, \
-    get_particles_by_tiles
+from particles import *
 from utilities import CombatStats, Living, Manaized, Staminaized, \
-    Movable, get_direction, Positional
+    Movable, get_direction, Positional, UpdateReq
 from bool_expr import BoolExpr, construct_from_str
 from typing import Union, Tuple, List
 from error import InvalidConstructionInfo
 from settings import *
 
 
-class Puppet(Creature):
+class Illuminator(ActiveParticle, Lightable):
+    """ Active particles that are able to illuminate nearby tiles """
+
+    def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
+        super().__init__(info)
+        il = {
+            'name': 'illuminate',
+            'stamina_cost': 0,
+            'mana_cost': 0,
+            'cooldown': 0,
+            'priority': LIGHT_PRIORITY,
+            'time': 1,
+            'method': self._illuminate
+        }
+        self.add_movement(il)
+
+    def _illuminate(self):
+        tiles = self.get_tiles_in_contact()
+        sl = self.get_stat('light_source')
+        for tile in tiles:
+            ol = tile.get_stat('light_source')
+            if ol < sl:
+                tile.add_stats({'light_source': sl - ol})
+
+
+class Puppet(Illuminator, UpdateReq):
     """ A stationary particle used for collision detection/animation
 
     === Public Attributes ===
@@ -32,7 +55,7 @@ class Puppet(Creature):
         super().__init__(info)
         attr = ["self_destroy", "_self_destroy_counter", 'owner']
         default = {
-            'self_destroy': int(FPS // 6),
+            'self_destroy': int(FPS // 3),
             '_self_destroy_counter': 0,
         }
         for key in default:
@@ -44,11 +67,14 @@ class Puppet(Creature):
             else:
                 raise InvalidConstructionInfo
 
-    def action(self, player_input=None) -> None:
+    def action(self):
+        self.enqueue_movement("illuminate", {})
+
+    def update_status(self) -> None:
         self._self_destroy_counter += 1
         self.sync()
         if self._self_destroy_counter >= self.self_destroy:
-            self.health = 0
+            self.remove()
 
     def sync(self):
         self.map_name = self.owner.map_name
@@ -58,7 +84,8 @@ class Puppet(Creature):
             self.owner.get_stat('attack_range')
 
 
-class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
+class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable,
+                      Lightable):
     """ Standard movesets that covers basic moving, offensive and defensive
     movements, must be inherited by other sub-creature classes in order to
     utilize these methods.
@@ -121,6 +148,7 @@ class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
             'time': DEFAULT_ACTION_TIMER,
             'method': self.move
         }
+
         moves = [ba, mv]
         for move in moves:
             self.add_movement(move)
@@ -207,7 +235,7 @@ class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
     def direction_increment(self, time: int, direction: str, total: float,
                             current: int) \
             -> Tuple[float, float]:
-        """ Increment the position of the particle in given direction """
+        """ Change the position of the particle towards the given direction """
         vel = self.get_stat('v' + direction)
 
         for i in range(time):
@@ -253,7 +281,7 @@ class StandardMoveSet(Creature, CombatStats, Manaized, Movable):
         return self.target.eval(vars(particle))
 
 
-class Fireball(StandardMoveSet):
+class Fireball(StandardMoveSet, Illuminator):
     """ A projectile that damages nearby living particles on contact
 
     === Public Attributes ===
@@ -333,9 +361,10 @@ class Fireball(StandardMoveSet):
             self.count_down()
             self.move(self.direction)
             self.update_position()
+            self.enqueue_movement("illuminate", {})
         else:
             self.basic_attack(None)
-            self.health = 0
+            self.remove()
 
 
 class ProjectileThrowable(Creature, CombatStats, Manaized):
