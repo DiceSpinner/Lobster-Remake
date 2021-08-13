@@ -10,7 +10,7 @@ Implemented Functionalities (with regards to the original version):
 - Zoomable Camera (new)
 - Customizable Tile Map (new)
 - Customizable Attack Texture (new)
-- Collision Detection between circles and axis-alined squares (Improved) 
+- Collision Detection between circles and axis-aligned squares (Improved) 
 - Customizable tile lighting (new)
 - Particle Action System (Improved)
 - Living Particles
