@@ -19,8 +19,8 @@ class Particle(Collidable):
     - display_priority: The display priority of this particle, particles with
         the highest priority will be displayed on top of the screen
 
-    - name: Name of this particle (displayed in map txt file)
-
+    - name: Name of this particle
+    - map_display: Display in the map txt file
     === Private Attributes ===
     -
     """
@@ -39,6 +39,7 @@ class Particle(Collidable):
     id: int
     display_priority: int
     texture: str
+    map_display: str
     name: str
     occupation: dict[str, Set[Tuple[int, int]]]
 
@@ -46,9 +47,9 @@ class Particle(Collidable):
         default = {
             'display_priority': DEFAULT_DISPLAY_PRIORITY,
             'texture': DEFAULT_PARTICLE_TEXTURE,
-            'name': DEFAULT_PARTICLE_NAME,
+            'name': Particle.ID + 1,
         }
-        attr = ['display_priority', 'texture', 'name']
+        attr = ['display_priority', 'texture', 'name', 'map_display']
         super().__init__(info)
         self.id = Particle.ID
         Particle.ID += 1
@@ -172,9 +173,39 @@ class Block(Particle, Lightable):
                         queue.enqueue((p2.id, block.id))
 
 
-class Creature(DirectionalParticle, Living, Lightable):
+class ActiveParticle(DirectionalParticle, Staminaized):
     """
-    Description: Movable particles that can act on its own
+    Description: Particles that can act on its own
+    """
+    ap_group = {}
+
+    def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
+        if "display_priority" not in info:
+            info['display_priority'] = 2
+        super().__init__(info)
+        ActiveParticle.ap_group[self.id] = self
+
+    def action(self) -> None:
+        """ AI of this creature, this method should
+        be called on every active creature regularly
+        """
+        raise NotImplementedError
+
+    def get_tiles_in_contact(self) -> List[Block]:
+        for t in self.occupation[self.map_name]:
+            tile = Particle.game_map[self.map_name][t[0]][t[1]]
+            for ps in tile:
+                if ps in Block.block_group:
+                    yield Block.block_group[ps]
+
+    def remove(self):
+        DirectionalParticle.remove(self)
+        ActiveParticle.ap_group.pop(self.id, None)
+
+
+class Creature(ActiveParticle, Living):
+    """
+    Description: Active particles that are considered alive
 
     Additional Attributes:
         light_on: Whether this creature is illuminating its surroundings
@@ -185,9 +216,7 @@ class Creature(DirectionalParticle, Living, Lightable):
     """
     creature_group = {}
     creature_textures = {}
-    active: bool
     color: Tuple[int, int, int]
-    rotation: dict[int, dict[float, pygame.Surface]]
     light_on: bool
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
@@ -235,27 +264,16 @@ class Creature(DirectionalParticle, Living, Lightable):
         """
         raise NotImplementedError
 
-    def get_tiles_in_contact(self) -> List[Block]:
-        for t in self.occupation[self.map_name]:
-            tile = Particle.game_map[self.map_name][t[0]][t[1]]
-            for ps in tile:
-                if ps in Block.block_group:
-                    yield Block.block_group[ps]
-
-    def light(self):
-        tiles = self.get_tiles_in_contact()
-        sl = self.get_stat('light_source')
-        for tile in tiles:
-            ol = tile.get_stat('light_source')
-            if ol < sl:
-                tile.add_stats({'light_source': sl - ol})
-
     def die(self):
         self.remove()
 
     def remove(self):
-        Particle.remove(self)
+        ActiveParticle.remove(self)
         Creature.creature_group.pop(self.id, None)
+
+    def update_status(self):
+        Living.update_status(self)
+        self.cooldown_countdown()
 
 
 def calculate_colliding_tiles(x: float, y: float, diameter: int,

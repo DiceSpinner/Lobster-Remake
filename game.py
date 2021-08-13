@@ -5,7 +5,7 @@ from effect import *
 from particles import *
 from Creatures import NPC, Player
 from utilities import Positional, Movable, Collidable, Regenable, Staminaized, \
-    BufferedStats
+    BufferedStats, UpdateReq
 from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
 from settings import *
@@ -65,7 +65,7 @@ class GameMap:
     def update_contents(self) -> None:
         for particle in self.all_particles.copy():
             if particle not in Particle.particle_group or \
-                 not Particle.particle_group[particle].map_name == self.name:
+                    not Particle.particle_group[particle].map_name == self.name:
                 self.all_particles.remove(particle)
 
         for new_particle in Particle.new_particles.copy():
@@ -120,9 +120,9 @@ class Camera(Positional):
         self.y = self.particle.y + radius - self.height / 2 / Particle.Scale
         current_map = self.game_maps[self.map_name]
         self.max_x = current_map.width * TILE_SIZE - math.ceil(self.width /
-                Particle.Scale)
+                                                               Particle.Scale)
         self.max_y = current_map.height * TILE_SIZE - math.ceil(self.height /
-                Particle.Scale)
+                                                                Particle.Scale)
         if self.x > self.max_x:
             self.x = self.max_x
         elif self.x < self.min_x:
@@ -132,20 +132,20 @@ class Camera(Positional):
         elif self.y < self.min_y:
             self.y = self.min_y
 
-    def display(self, screen: pygame.Surface):
-        """ Display the content onto the screen by their priority
-        """
+    def get_displaying_particles(self) -> Tuple[Set[Tuple[int, float, float]],
+                                                Set[Tuple[
+                                                    Tuple[float, float], int]]]:
         size = math.ceil(TILE_SIZE * Particle.Scale)
         current_map = self.game_maps[self.map_name]
         displaying = set()
         start_row = int(self.y // TILE_SIZE)
         first_tile_pixel_y = math.ceil((self.y - start_row * TILE_SIZE) *
-                                     Particle.Scale)
+                                       Particle.Scale)
         offset_y = size - first_tile_pixel_y
         end_row = start_row + math.ceil((self.height - offset_y) / size)
         start_col = int(self.x // TILE_SIZE)
         first_tile_pixel_x = math.ceil((self.x - start_col * TILE_SIZE) *
-                                     Particle.Scale)
+                                       Particle.Scale)
         offset_x = size - first_tile_pixel_x
         end_col = start_col + math.ceil((self.width - offset_x) / size)
         shades = set()
@@ -163,9 +163,11 @@ class Camera(Positional):
                         continue
                     in_queue.add(idti)
                     item = Particle.particle_group[idti]
+                    block_x = begin_x + col_count * size
+                    block_y = begin_y + row_count * size
                     if isinstance(item, Block):
-                        display_x = begin_x + col_count * size
-                        display_y = begin_y + row_count * size
+                        display_x = block_x
+                        display_y = block_y
                         if item.get_stat("brightness") > 0:
                             displaying.add((idti, display_x, display_y))
                             tiles = get_particles_in_radius(item, 1, Block,
@@ -186,8 +188,10 @@ class Camera(Positional):
                                 shades.add(((dx, dy), 255 -
                                             t.get_stat("brightness")))
                     else:
-                        display_x = int((item.x - self.x) * Particle.Scale)
-                        display_y = int((item.y - self.y) * Particle.Scale)
+                        bx = j * TILE_SIZE
+                        by = i * TILE_SIZE
+                        display_x = block_x + (item.x - bx) * Particle.Scale
+                        display_y = block_y + (item.y - by) * Particle.Scale
                         flag = False
                         tiles = item.get_tiles_in_contact()
                         for t in tiles:
@@ -197,6 +201,12 @@ class Camera(Positional):
                             displaying.add((idti, display_x, display_y))
                 col_count += 1
             row_count += 1
+        return displaying, shades
+
+    def display(self, screen: pygame.Surface):
+        """ Display the content onto the screen by their priority
+        """
+        displaying, shades = self.get_displaying_particles()
 
         queue = PriorityQueue(priority_over_id)
         new_dict = {}
@@ -269,8 +279,8 @@ class Level:
             particles = os.listdir(path)
             for particle in particles:
                 pre_p = PredefinedParticle(os.path.join(path, particle))
-                if pre_p.info['name'] not in look_up:
-                    look_up[pre_p.info['name']] = pre_p
+                if pre_p.info['map_display'] not in look_up:
+                    look_up[pre_p.info['map_display']] = pre_p
                 else:
                     raise CollidedParticleNameError
 
@@ -308,12 +318,14 @@ class Level:
                                   self._game_maps)
         player_key = list(Player.player_group)[0]
         player = Player.player_group[player_key]
+
         # mouse tracking
         mouse_pos = pygame.mouse.get_pos()
         pos = Positional({})
         pos.x = mouse_pos[0] / Particle.Scale + self._camera.x
         pos.y = mouse_pos[1] / Particle.Scale + self._camera.y
         player.aim(pos)
+
         # player input and other game actions
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -328,23 +340,18 @@ class Level:
             if Particle.Scale < MIN_CAMERA_SCALE:
                 Particle.Scale = MIN_CAMERA_SCALE
         active_map = self._game_maps[player.map_name]
-        active_particles = get_particles_in_radius(player, 12, None, True)
+        active_particles = get_particles_in_radius(player,
+                                                   PARTICLE_UPDATE_RADIUS, None,
+                                                   True)
         # particle status update
-        living = []
-        creature = []
         tiles = []
+        updates = []
         for particle in active_particles:
-            # particle = Particle.particle_group[particle]
-            if isinstance(particle, Regenable):
-                particle.regen()
-            if isinstance(particle, Creature):
+            if isinstance(particle, ActiveParticle):
                 # queue up actions
                 particle.action()
-                creature.append(particle)
-            if isinstance(particle, Living):
-                living.append(particle)
-            if isinstance(particle, Staminaized):
-                particle.cooldown_countdown()
+            if isinstance(particle, UpdateReq):
+                updates.append(particle)
             if isinstance(particle, Block):
                 tiles.append(particle)
 
@@ -354,16 +361,11 @@ class Level:
             particle.execute_movement(name, args)
         Staminaized.action_queue.reset()
 
-        for particle in living:
-            particle.calculate_health()
-            if particle.is_dead():
-                particle.die()
+        for i in updates:
+            i.update_status()
         active_map.update_contents()
 
         # lighting
-        for creature in creature:
-            if creature.get_stat('light_source') > 0 and creature.light_on:
-                creature.light()
         for block in tiles:
             if block.get_stat('light_source') > 0:
                 block.light()
@@ -488,6 +490,10 @@ class Game:
                 if not level.running:
                     running = False
             self._screen.blit(cursor_image, pygame.mouse.get_pos())
+            # FPS
+            font = pygame.font.Font(None, 25)
+            text = font.render(str(round(clock.get_fps())), True, (255, 255, 255))
+            self._screen.blit(text, (0, 0))
             pygame.display.flip()
         pygame.quit()
 

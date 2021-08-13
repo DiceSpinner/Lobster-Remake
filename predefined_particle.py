@@ -34,7 +34,7 @@ class PredefinedParticle:
             class_name = content[1].rstrip()
             fields = content[2:]
 
-            self.info['name'] = particle_name
+            self.info['map_display'] = particle_name
             self.info['class'] = class_name
 
             # unpack the fields

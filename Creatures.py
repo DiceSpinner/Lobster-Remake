@@ -1,26 +1,29 @@
-from particle_actions import StandardMoveSet, ProjectileThrowable
+from particle_actions import StandardMoveSet, ProjectileThrowable, Illuminator
 from particles import Creature
 from typing import List, Tuple, Union, Optional
 import pygame
 
 
-class Player(StandardMoveSet, ProjectileThrowable):
+class Player(StandardMoveSet, ProjectileThrowable, Illuminator):
     """
     Description: Player class
 
-    Additional Attributes:
-        pressed_keys: A list of pressed keys of this player
+    === Public Attribute ===
+    - light_on: Whether the player is illuminating its surroundings
+
 
     Representation Invariants:
 
     """
     player_group = {}
     mouse_buttons: Tuple[int, int, int]
+    light_on: bool
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         super().__init__(info)
         Player.player_group[self.id] = self
         self.mouse_buttons = (0, 0, 0)
+        self.light_on = True
 
     def action(self) -> None:
         self.mouse_buttons = pygame.mouse.get_pressed(3)
@@ -56,7 +59,8 @@ class Player(StandardMoveSet, ProjectileThrowable):
                 direction = 0
             self.enqueue_movement('move', {"direction": direction})
         # light
-
+        if self.light_on:
+            self.enqueue_movement('illuminate', {})
         # attack
         if self.mouse_buttons[0] == 1:
             self.enqueue_movement('basic_attack', {})
