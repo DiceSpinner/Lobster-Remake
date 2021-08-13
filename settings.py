@@ -52,6 +52,7 @@ DEFAULT_ATTACK_STAMINA_COST = 45  # stamina consumed per attack
 DEFAULT_ATTACK_MANA_COST = 0
 DEFAULT_TARGET = "( not id = self.id )"
 BASIC_ATTACK_TEXTURE = 'attack_circle.png'
+BASIC_ATTACK_BRIGHTNESS = 256
 
 # SpellCastable interface
 DEFAULT_ABILITY_POWER = 30

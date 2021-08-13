@@ -4,7 +4,7 @@ from typing import List, Tuple, Union, Optional
 import pygame
 
 
-class Player(StandardMoveSet, ProjectileThrowable, Illuminator):
+class Player(StandardMoveSet, ProjectileThrowable, Illuminator, Creature):
     """
     Description: Player class
 
@@ -72,7 +72,7 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator):
         Player.player_group.pop(self.id, None)
 
 
-class NPC(StandardMoveSet, ProjectileThrowable):
+class NPC(StandardMoveSet, ProjectileThrowable, Creature):
     """ Description: Non-Player Character class
 
     Additional Attributes:

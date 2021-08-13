@@ -84,8 +84,7 @@ class Puppet(Illuminator, UpdateReq):
             self.owner.get_stat('attack_range')
 
 
-class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable,
-                      Lightable):
+class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
     """ Standard movesets that covers basic moving, offensive and defensive
     movements, must be inherited by other sub-creature classes in order to
     utilize these methods.
@@ -177,7 +176,7 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable,
             'shape': self.shape,
             'texture': self.actions['basic_attack'].action_texture,
             'owner': self,
-            'light_source': self.get_stat('light_source'),
+            'light_source': BASIC_ATTACK_BRIGHTNESS,
             'x': c2x,
             'y': c2y,
             'solid': False,
@@ -358,7 +357,7 @@ class Fireball(StandardMoveSet, Illuminator):
             self.remove()
 
 
-class ProjectileThrowable(Creature, CombatStats, Manaized):
+class ProjectileThrowable(ActiveParticle, CombatStats, Manaized):
     """
     """
     target: BoolExpr
