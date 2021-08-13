@@ -86,10 +86,8 @@ class NPC(StandardMoveSet, ProjectileThrowable):
         NPC.npc_group[self.id] = self
 
     def action(self) -> None:
-        # self.perform_act('basic_attack')
-        self.direction += 1
-        if self.direction >= 360:
-            self.direction -= 360
+        self.enqueue_movement('basic_attack', {})
+        # self.enqueue_movement("move", {'direction': self.direction})
         # self.enqueue_movement('fireball', {})
 
     def remove(self):

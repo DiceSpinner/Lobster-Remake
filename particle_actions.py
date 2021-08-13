@@ -317,14 +317,6 @@ class Fireball(StandardMoveSet, Illuminator):
         if self._self_destroy_counter >= self.self_destruction * FPS:
             self.destroyed = True
 
-    def update_position(self) -> None:
-        x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
-        while (x_d > 0 or y_d > 0) and not self.destroyed:
-            x_d, c_x = self.direction_increment(x_time, "x",
-                                                x_d, c_x)
-            y_d, c_y = self.direction_increment(y_time, "y",
-                                                y_d, c_y)
-
     def direction_increment(self, time: int, direction: str, total: float,
                             current: int) -> Tuple[float, float]:
         """ Increment the position of the particle in given direction """
@@ -360,7 +352,6 @@ class Fireball(StandardMoveSet, Illuminator):
         if not self.destroyed:
             self.count_down()
             self.move(self.direction)
-            self.update_position()
             self.enqueue_movement("illuminate", {})
         else:
             self.basic_attack(None)
@@ -433,6 +424,8 @@ class ProjectileThrowable(Creature, CombatStats, Manaized):
             'direction': self.direction,
             'x': c2x,
             'y': c2y,
+            'vx': self.get_stat("vx"),
+            'vy': self.get_stat("vy"),
             'map_name': self.map_name,
             'basic_attack_texture': 'fireball_explosion.png'
         }
