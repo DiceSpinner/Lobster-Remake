@@ -1,5 +1,7 @@
 import pygame
 import math
+
+import particles
 from particles import *
 from utilities import CombatStats, Living, Manaized, Staminaized, \
     Movable, get_direction, Positional, UpdateReq
@@ -34,12 +36,13 @@ class Illuminator(ActiveParticle, Lightable):
                 tile.add_stats({'light_source': sl - ol})
 
 
-class Puppet(Illuminator, UpdateReq):
+class Puppet(Illuminator):
     """ A stationary particle used for collision detection/animation
 
     === Public Attributes ===
     _ self_destroy: Ticks before self-destruction
     - owner: The particle that started this puppet
+    - sync_offset: The position difference between self and the owner particle
 
     === Private Attributes ===
     - _self_destroy_counter: self-destruction counter
@@ -47,13 +50,14 @@ class Puppet(Illuminator, UpdateReq):
     target: BoolExpr
     self_destroy: int
     _self_destroy_counter: int
+    sync_offset: Tuple[int, int]
     owner: Particle
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
         if "display_priority" not in info:
             info['display_priority'] = 1
         super().__init__(info)
-        attr = ["self_destroy", "_self_destroy_counter", 'owner']
+        attr = ["self_destroy", "_self_destroy_counter", 'owner', 'sync_offset']
         default = {
             'self_destroy': int(FPS // 3),
             '_self_destroy_counter': 0,
@@ -70,6 +74,10 @@ class Puppet(Illuminator, UpdateReq):
     def action(self):
         self.enqueue_movement("illuminate", {})
 
+    def delay_destruction(self, frames: int) -> None:
+        """ Delay self-destruction for a certain amount of frames """
+        self._self_destroy_counter -= frames
+
     def update_status(self) -> None:
         self._self_destroy_counter += 1
         self.sync()
@@ -78,10 +86,8 @@ class Puppet(Illuminator, UpdateReq):
 
     def sync(self):
         self.map_name = self.owner.map_name
-        self.x = self.owner.x - 1 + self.owner.get_stat('diameter') / 2 - \
-            self.owner.get_stat('attack_range')
-        self.y = self.owner.y - 1 + self.owner.get_stat('diameter') / 2 - \
-            self.owner.get_stat('attack_range')
+        self.x = self.owner.x + self.sync_offset[0]
+        self.y = self.owner.y + self.sync_offset[1]
 
 
 class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
@@ -128,7 +134,10 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
             if op not in info:
                 info[op] = optional[op]
         self._attack_counter = 0
-        ba = {
+        self.animations = {}
+
+        # add moves
+        basic_attack = {
             'name': 'basic_attack',
             'stamina_cost': DEFAULT_ATTACK_STAMINA_COST,
             'mana_cost': DEFAULT_ATTACK_MANA_COST,
@@ -138,7 +147,7 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
             'time': DEFAULT_ACTION_TIMER,
             'method': self.basic_attack
         }
-        mv = {
+        move = {
             'name': 'move',
             'stamina_cost': 0,
             'mana_cost': 0,
@@ -147,8 +156,18 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
             'time': DEFAULT_ACTION_TIMER,
             'method': self.move
         }
-
-        moves = [ba, mv]
+        guard = {
+            "name": 'guard',
+            'stamina_cost': 0,
+            'mana_cost': 0,
+            'cooldown': 3,
+            'priority': DEFENSE_PRIORITY,
+            'time': 3,
+            'method': self.guard,
+            'texture': GUARD_TEXTURE,
+            'extendable': True
+        }
+        moves = [basic_attack, move, guard]
         for move in moves:
             self.add_movement(move)
 
@@ -167,12 +186,15 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
 
     def basic_attack(self, target=None) -> bool:
         """ Damage every nearby creatures within the attack range """
-        c1x = self.x - 1 + self.get_stat('diameter') / 2
-        c1y = self.y - 1 + self.get_stat('diameter') / 2
-        c2x = c1x - self.get_stat('attack_range')
-        c2y = c1y - self.get_stat('attack_range')
+        diameter = self.get_stat('diameter')
+        attack_range = self.get_stat('attack_range')
+        c1x = self.x - 1 + diameter / 2
+        c1y = self.y - 1 + diameter / 2
+        c2x = c1x - attack_range
+        c2y = c1y - attack_range
+        offset = - 1 + diameter / 2 - attack_range
         info = {
-            'diameter': self.get_stat('attack_range') * 2 + 1,
+            'diameter': attack_range * 2 + 1,
             'shape': self.shape,
             'texture': self.actions['basic_attack'].action_texture,
             'owner': self,
@@ -180,9 +202,11 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
             'x': c2x,
             'y': c2y,
             'solid': False,
-            'map_name': self.map_name
+            'map_name': self.map_name,
+            'sync_offset': (offset, offset)
         }
         collision_box = Puppet(info)
+        self.animations["basic_attack"] = collision_box
         living = list(filter(lambda c: isinstance(Particle.particle_group[c],
                                                   Living),
                              get_nearby_particles(collision_box)))
@@ -275,6 +299,44 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
                                                 x_d, c_x)
             y_d, c_y = self.direction_increment(y_time, "y",
                                                 y_d, c_y)
+
+    def guard(self):
+        if "guard" not in self.animations:
+            diameter = self.get_stat('diameter')
+            info = {
+                'diameter': diameter * 2,
+                'shape': self.shape,
+                'texture': self.actions['guard'].action_texture,
+                'owner': self,
+                'light_source': 0,
+                'x': self.x - diameter / 2,
+                'y': self.y - diameter / 2,
+                'solid': False,
+                'map_name': self.map_name,
+                'self_destroy': 3,
+                'sync_offset': (-diameter / 2, -diameter / 2)
+            }
+            self.animations['guard'] = Puppet(info)
+        else:
+            self.animations['guard'].delay_destruction(1)
+        self.add_stats({"stamina_regen": -15})
+        damage = self.get_stat("incoming_damage")
+        if damage > 0:
+            damage = damage * self.get_stat("defense") / 100
+            self.add_stats({"incoming_damage": -damage})
+            self.stamina -= damage
+            if self.stamina < 0:
+                self.stamina = 0
+                self.action_halt('guard')
+
+    def update_status(self):
+        """ This method must be called every frame to fully delete
+        self-destroyed puppets
+        """
+        for particle in self.animations.copy():
+            p = self.animations[particle]
+            if p.id not in Particle.particle_group:
+                self.animations.pop(particle, None)
 
     def _is_target(self, particle: Particle) -> bool:
         return self.target.eval(vars(particle))

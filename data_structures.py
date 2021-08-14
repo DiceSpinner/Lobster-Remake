@@ -203,23 +203,34 @@ class WeightedPriorityQueue:
         >>> print(queue)
         [(20, 1), (10, 1)]
         """
-        num = self._counter
+        key = self._assign_key()
         for i in range(len(self._items)):
             it = self._items[i][1]
             if self._comparator(item, it):
-                self._items.insert(i, (num, item))
-                self._weights[num] = weight
+                self._items.insert(i, (key, item))
+                self._weights[key] = weight
                 self._size += 1
-                self._counter += 1
-                return num
-        self._counter += 1
-        self._weights[num] = weight
-        self._items.append((num, item))
+                return key
+        self._weights[key] = weight
+        self._items.append((key, item))
         self._size += 1
-        return num
+        return key
+
+    def _assign_key(self) -> int:
+        try:
+            return self._popped_keys.pop()
+        except IndexError:
+            num = self._counter
+            self._counter += 1
+            return num
 
     def dequeue(self) -> Any:
         """ Pop items from the queue
+
+        Key-note: Items with 0 weight before popping will be removed from the
+            queue without returning, when this happens, the next item in the
+            queue will be returned.
+
         >>> queue = WeightedPriorityQueue(_num_comparator)
         >>> queue.enqueue(10, 1)
         0
@@ -243,13 +254,17 @@ class WeightedPriorityQueue:
         if self._size > 0:
             item = self._items[self._pointer]
             weight = self._weights[item[0]] - 1
-            if weight <= 0:
+            if weight == 0:
                 self._items.pop(self._pointer)
                 self._size -= 1
                 self._weights.pop(item[0], None)
+                self._popped_keys.append(item[0])
                 if self._pointer >= self._size:
                     self._pointer = 0
                 return item[1]
+            if weight < 0:
+                self._items.pop(self._pointer)
+                return self.dequeue()
             self._weights[item[0]] = weight
             if self._pointer == self._size - 1:
                 # reset the pointer
@@ -285,7 +300,15 @@ class WeightedPriorityQueue:
         >>> print(queue)
         [(20, 2), (10, 3)]
         """
-        self._weights[key] = weight
+        try:
+            self._weights[key] = weight
+            if weight == 0:
+                self._size -= 1
+        except KeyError:
+            pass
+
+    def get_weight(self, key: int) -> int:
+        return self._weights[key]
 
 
 def _test_comparator(i1: Any, i2: Any) -> bool:
