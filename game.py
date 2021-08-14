@@ -492,7 +492,8 @@ class Game:
             self._screen.blit(cursor_image, pygame.mouse.get_pos())
             # FPS
             font = pygame.font.Font(None, 25)
-            text = font.render(str(round(clock.get_fps())), True, (255, 255, 255))
+            text = font.render("FPS:" + str(round(clock.get_fps())), True,
+                               (255, 255, 255))
             self._screen.blit(text, (0, 0))
             pygame.display.flip()
         pygame.quit()
