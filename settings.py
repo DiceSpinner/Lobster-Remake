@@ -62,7 +62,8 @@ DEFAULT_ABILITY_MANA_COST = 10
 
 # Defense Stats
 DEFAULT_DEFENSE = 50
-DEFAULT_DAMAGE_REDUCTION = 100
+DEFENSE_TIMER = int(FPS / 10)
+GUARD_TEXTURE = 'guard_circle.png'
 
 # ExplosionProjectileCastable interface
 DEFAULT_PROJECTILE_COUNTDOWN = 2  # 2 secs before self-destruction
@@ -72,7 +73,7 @@ FIREBALL_TEXTURE = 'fireball.png'
 FIREBALL_BRIGHTNESS = 256
 
 # Action priorities
-ATTACK_PRIORITY = 1
+ATTACK_PRIORITY = 3
 MOVE_PRIORITY = 2
 DEFENSE_PRIORITY = 1
 LIGHT_PRIORITY = 2

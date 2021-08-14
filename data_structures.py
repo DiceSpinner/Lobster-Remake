@@ -137,7 +137,8 @@ class WeightedPriorityQueue:
     priority will be popped first. Additionally, each item has a weight factor
     assigned to it. Popping items will cause their weight factor to drop by 1.
     The item will not be fully removed from the queue if the weight factor is
-    greater than 0.
+    greater than 0. Enqueuing an item returns the key to access the weight
+    factor of that item. This can be used to modify its weight factor.
 
     === Private attributes ===
     _items: Items stored in this queue. The first item is being represented by
@@ -145,60 +146,104 @@ class WeightedPriorityQueue:
     _pointer: Index of the item being popped
     _comparator: The callable function used to sort items
     _size: Size of the queue
+    _weights: A dictionary that contains the weight factors of all of the items
+        in this queue.
+    _popped_keys: A list of keys that has been popped out
+    _counter: A number that represents an unoccupied key
     """
 
     _items: List[Tuple[int, Any]]
+    _weights: dict[int, int]
     _comparator: Callable[[Any, Any], bool]
     _pointer: int
     _size: int
+    _popped_keys: List[int]
+    _counter: int
 
     def __init__(self, comparator: Callable) -> None:
         self._comparator = comparator
         self._items = []
         self._size = 0
         self._pointer = 0
+        self._weights = {}
+        self._popped_keys = []
+        self._counter = 0
 
     def __str__(self):
-        return self._items.__str__()
+        string = "["
+        for item in self._items:
+            key = item[0]
+            item = item[1]
+            weight = self._weights[key]
+            if isinstance(item, str):
+                s = "'" + item + "'"
+            else:
+                s = str(item)
+            string += "(" + s + ", " + str(weight) + "), "
+        return string[:-2] + "]"
 
-    def enqueue(self, item: Any, weight: int) -> None:
-        """  Enqueue the item with the given weight
+    def enqueue(self, item: Any, weight: int) -> int:
+        """  Enqueue the item with the given weight and returns the key that can
+         be used to access its weight factor
 
         >>> queue = WeightedPriorityQueue(_test_comparator)
         >>> queue.enqueue("item", 1)
+        0
         >>> print(queue)
-        [(1, 'item')]
+        [('item', 1)]
         >>> queue.enqueue("item", 2)
+        1
         >>> print(queue)
-        [(1, 'item'), (2, 'item')]
+        [('item', 2), ('item', 1)]
         >>> queue = WeightedPriorityQueue(_num_comparator)
         >>> queue.enqueue(10, 1)
+        0
         >>> queue.enqueue(20, 1)
+        1
         >>> print(queue)
-        [(1, 20), (1, 10)]
+        [(20, 1), (10, 1)]
         """
-        for i in self._items:
-            it = i[1]
-            if not self._comparator(item, it):
-                self._items.insert(self._items.index(i), (weight, item))
+        key = self._assign_key()
+        for i in range(len(self._items)):
+            it = self._items[i][1]
+            if self._comparator(item, it):
+                self._items.insert(i, (key, item))
+                self._weights[key] = weight
                 self._size += 1
-                return
-        self._items.append((weight, item))
+                return key
+        self._weights[key] = weight
+        self._items.append((key, item))
         self._size += 1
+        return key
+
+    def _assign_key(self) -> int:
+        try:
+            return self._popped_keys.pop()
+        except IndexError:
+            num = self._counter
+            self._counter += 1
+            return num
 
     def dequeue(self) -> Any:
         """ Pop items from the queue
+
+        Key-note: Items with 0 weight before popping will be removed from the
+            queue without returning, when this happens, the next item in the
+            queue will be returned.
+
         >>> queue = WeightedPriorityQueue(_num_comparator)
         >>> queue.enqueue(10, 1)
+        0
         >>> queue.enqueue(20, 3)
+        1
         >>> print(queue)
-        [(3, 20), (1, 10)]
+        [(20, 3), (10, 1)]
         >>> queue.dequeue()
         20
         >>> queue.dequeue()
         10
         >>> print(queue)
-        [(2, 20)]
+        [(20, 2)]
         >>> queue.dequeue()
         20
         >>> queue.dequeue()
@@ -208,14 +253,19 @@ class WeightedPriorityQueue:
         """
         if self._size > 0:
             item = self._items[self._pointer]
-            weight = item[0] - 1
-            if weight <= 0:
+            weight = self._weights[item[0]] - 1
+            if weight == 0:
                 self._items.pop(self._pointer)
                 self._size -= 1
+                self._weights.pop(item[0], None)
+                self._popped_keys.append(item[0])
                 if self._pointer >= self._size:
                     self._pointer = 0
                 return item[1]
-            self._items[self._pointer] = (weight, item[1])
+            if weight < 0:
+                self._items.pop(self._pointer)
+                return self.dequeue()
+            self._weights[item[0]] = weight
             if self._pointer == self._size - 1:
                 # reset the pointer
                 self._pointer = 0
@@ -232,6 +282,33 @@ class WeightedPriorityQueue:
 
     def get_size(self):
         return self._size
+
+    def set_weight(self, key: int, weight: int) -> None:
+        """ Set the weight of the given item
+
+        >>> queue = WeightedPriorityQueue(_num_comparator)
+        >>> queue.enqueue(10, 1)
+        0
+        >>> queue.enqueue(20, 1)
+        1
+        >>> print(queue)
+        [(20, 1), (10, 1)]
+        >>> queue.set_weight(0, 3)
+        >>> print(queue)
+        [(20, 1), (10, 3)]
+        >>> queue.set_weight(1, 2)
+        >>> print(queue)
+        [(20, 2), (10, 3)]
+        """
+        try:
+            self._weights[key] = weight
+            if weight == 0:
+                self._size -= 1
+        except KeyError:
+            pass
+
+    def get_weight(self, key: int) -> int:
+        return self._weights[key]
 
 
 def _test_comparator(i1: Any, i2: Any) -> bool:

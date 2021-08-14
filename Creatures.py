@@ -64,8 +64,14 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator, Creature):
         # attack
         if self.mouse_buttons[0] == 1:
             self.enqueue_movement('basic_attack', {})
+        elif self.mouse_buttons[2] == 1:
+            self.enqueue_movement('guard', {})
         if pressed_keys[pygame.K_q]:
             self.enqueue_movement('fireball', {})
+
+    def update_status(self):
+        Creature.update_status(self)
+        StandardMoveSet.update_status(self)
 
     def remove(self):
         Creature.remove(self)
@@ -89,6 +95,10 @@ class NPC(StandardMoveSet, ProjectileThrowable, Creature):
         self.enqueue_movement('basic_attack', {})
         # self.enqueue_movement("move", {'direction': self.direction})
         # self.enqueue_movement('fireball', {})
+
+    def update_status(self):
+        Creature.update_status(self)
+        StandardMoveSet.update_status(self)
 
     def remove(self):
         Creature.remove(self)

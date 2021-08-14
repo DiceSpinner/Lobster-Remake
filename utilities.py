@@ -8,12 +8,12 @@ import math
 
 
 def compare_by_execution_priority(i1: Tuple[Staminaized, dict[str, Any], str],
-                                  i2: Tuple[Staminaized, dict[str, Any], str])\
+                                  i2: Tuple[Staminaized, dict[str, Any], str]) \
         -> bool:
     """ Sort by non-decreasing order """
     a1 = i1[0].actions[i1[2]]
     a2 = i2[0].actions[i2[2]]
-    return a1.action_priority < a2.action_priority
+    return a1.action_priority > a2.action_priority
 
 
 class UpdateReq:
@@ -437,7 +437,7 @@ class Action:
     - time: The amount of frames this action is going to last
     - action_priority: The execution priority of this action
     - action_texture: Names of assets of Visual Displays of this action
-    - executing: Timer for this action while executing.
+    - extendable: Whether this action can be extended for a longer duration
 
     === Private Attributes ===
     - _cooldown_counter: The counter of the cooldown
@@ -449,7 +449,7 @@ class Action:
     action_texture: str
     _cooldown_counter: int
     method: Callable
-    executing: int
+    extendable: bool
 
     def __init__(self, info: dict[str, Any]) -> None:
         self.name = info['name']
@@ -458,17 +458,14 @@ class Action:
         self.action_priority = info['priority']
         self.action_time = math.ceil(info['time'])
         self.method = info['method']
-        self.executing = 0
-        if 'texture' in info:
-            self.action_texture = info['texture']
+        self.action_texture = info['texture']
+        self.extendable = info['extendable']
 
     def can_act(self) -> bool:
-        if self.executing == 0:
-            # Check if the action is on cooldown
-            if self._cooldown_counter < self.cooldown * FPS:
-                return False
-            return True
-        return False
+        # Check if the action is on cooldown
+        if self._cooldown_counter < self.cooldown * FPS:
+            return False
+        return True
 
     def count(self):
         if self._cooldown_counter < self.cooldown * FPS:
@@ -477,7 +474,6 @@ class Action:
     def execute(self, args: dict[str, Any]):
         self.method(**args)
         self._cooldown_counter = 0
-        self.executing -= 1
 
 
 class Staminaized(Regenable):
@@ -487,6 +483,7 @@ class Staminaized(Regenable):
     - stamina: The required stats to perform actions
     - max_stamina: The maximum amount of stamina this unit can have
     - actions: All actions this unit can perform
+    - executing: Timer for all actions that are being executed
     """
 
     action_queue = WeightedPriorityQueue(compare_by_execution_priority)
@@ -494,6 +491,7 @@ class Staminaized(Regenable):
     max_stamina: float
     actions: dict[str, Action]
     stamina_costs: dict[str, float]
+    executing: dict[str, Tuple[int, int]]
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
         attr = ['stamina', 'max_stamina']
@@ -504,6 +502,7 @@ class Staminaized(Regenable):
         }
         self.actions = {}
         self.stamina_costs = {}
+        self.executing = {}
         for key in default:
             if key not in info:
                 info[key] = default[key]
@@ -525,16 +524,42 @@ class Staminaized(Regenable):
             self.actions[name].count()
 
     def enqueue_movement(self, name: str, args: dict[str, Any]) -> None:
-        """ Add the action to the action queue """
-        if self.can_act(name):
-            Staminaized.action_queue.enqueue((self, args, name),
-                                             self.actions[name].action_time)
-            self.actions[name].executing = self.actions[name].action_time
+        """ Add the action to the action queue if it's not being executed.
+        Otherwise if the action is extendable. When that occurs, extends its
+        duration for 1 frame.
+        """
+        if name in self.executing:
+            action = self.actions[name]
+            if action.extendable:
+                key = self.executing[name][1]
+                weight = Staminaized.action_queue.get_weight(key)
+                Staminaized.action_queue.set_weight(key, weight + 1)
+                timer = self.executing[name][0] - 1
+                key = self.executing[name][1]
+                self.executing[name] = (timer, key)
+        elif self.can_act(name):
+            key = Staminaized.action_queue.enqueue((self, args, name),
+                                                   self.actions[
+                                                       name].action_time)
+            self.executing[name] = (0, key)
             self.resource_consume(name)
 
     def execute_movement(self, name: str, args: dict[str, Any]):
         """ Execute movements in self.executing """
+        key = self.executing[name][1]
+        timer = self.executing[name][0]
+        self.executing[name] = (timer + 1, key)
         self.actions[name].execute(args)
+        if timer + 1 == self.actions[name].action_time:
+            self.executing.pop(name, None)
+
+    def action_halt(self, name: str):
+        try:
+            key = self.executing[name][1]
+            Staminaized.action_queue.set_weight(key, 0)
+            self.executing.pop(name, None)
+        except KeyError:
+            pass
 
     def resource_consume(self, name: str):
         """ Consume the resource for performing this action """
@@ -553,13 +578,19 @@ class Staminaized(Regenable):
 
         Optional:
             1. Texture of the action accessed by "texture"
+            2. The extendability of the action accessed by "extendable"
         """
         name = info['name']
+        default = {
+            'texture': BASIC_ATTACK_TEXTURE,
+            'extendable': False
+        }
+        for attr in default:
+            if attr not in info:
+                info[attr] = default[attr]
         act = Action(info)
         self.stamina_costs[name] = info['stamina_cost']
         self.actions[name] = act
-        if 'texture' in info:
-            self.actions[name].action_texture = info['texture']
 
     def update_status(self):
         Regenable.update_status(self)
@@ -630,20 +661,19 @@ class CombatStats:
     - attack_power: The strength of the attack
     - ability_power: Scaling factor for ability strength
     - defense: Scaling factor for defense effectiveness
-    - active_damage_reduction: Damage reduction for this unit in guarded stance
     """
 
     attack_power: float
     ability_power: float
     defense: float
-    active_damage_reduction: float
 
     def __init__(self, info: dict[str, Union[int, float]]) -> None:
         self._attack_counter = 0
-        attr = ['attack_power', 'ability_power']
+        attr = ['attack_power', 'ability_power', 'defense']
         default = {
             'attack_power': DEFAULT_ATTACK_DAMAGE,
-            'ability_power': DEFAULT_ABILITY_POWER
+            'ability_power': DEFAULT_ABILITY_POWER,
+            'defense': DEFAULT_DEFENSE
         }
         for key in default:
             if key not in info:
