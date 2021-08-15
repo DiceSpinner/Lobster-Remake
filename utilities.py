@@ -438,7 +438,8 @@ class Action:
     - action_priority: The execution priority of this action
     - action_texture: Names of assets of Visual Displays of this action
     - extendable: Whether this action can be extended for a longer duration
-
+    - repeated_resource_consumption: (Only when extendable), determines whether
+        this actions consumes resource on each extended call
     === Private Attributes ===
     - _cooldown_counter: The counter of the cooldown
     """
@@ -450,6 +451,7 @@ class Action:
     _cooldown_counter: int
     method: Callable
     extendable: bool
+    repeated_resource_consumption: bool
 
     def __init__(self, info: dict[str, Any]) -> None:
         self.name = info['name']
@@ -460,6 +462,7 @@ class Action:
         self.method = info['method']
         self.action_texture = info['texture']
         self.extendable = info['extendable']
+        self.repeated_resource_consumption = info['consumption']
 
     def can_act(self) -> bool:
         # Check if the action is on cooldown
@@ -523,7 +526,7 @@ class Staminaized(Regenable):
         for name in self.actions:
             self.actions[name].count()
 
-    def enqueue_movement(self, name: str, args: dict[str, Any]) -> None:
+    def enqueue_action(self, name: str, args: dict[str, Any]) -> None:
         """ Add the action to the action queue if it's not being executed.
         Otherwise if the action is extendable. When that occurs, extends its
         duration for 1 frame.
@@ -531,6 +534,12 @@ class Staminaized(Regenable):
         if name in self.executing:
             action = self.actions[name]
             if action.extendable:
+                # extends the action by 1 frame
+                if action.repeated_resource_consumption:
+                    if self.stamina >= self.stamina_costs[name]:
+                        self.resource_consume(name)
+                    else:
+                        return
                 key = self.executing[name][1]
                 weight = Staminaized.action_queue.get_weight(key)
                 Staminaized.action_queue.set_weight(key, weight + 1)
@@ -538,14 +547,15 @@ class Staminaized(Regenable):
                 key = self.executing[name][1]
                 self.executing[name] = (timer, key)
         elif self.can_act(name):
+            # enqueue the action
             key = Staminaized.action_queue.enqueue((self, args, name),
                                                    self.actions[
                                                        name].action_time)
             self.executing[name] = (0, key)
             self.resource_consume(name)
 
-    def execute_movement(self, name: str, args: dict[str, Any]):
-        """ Execute movements in self.executing """
+    def execute_action(self, name: str, args: dict[str, Any]):
+        """ Execute actions in self.executing """
         key = self.executing[name][1]
         timer = self.executing[name][0]
         self.executing[name] = (timer + 1, key)
@@ -562,11 +572,11 @@ class Staminaized(Regenable):
             pass
 
     def resource_consume(self, name: str):
-        """ Consume the resource for performing this action """
+        """ Consume the resource for executing this action """
         self.stamina -= self.stamina_costs[name]
 
-    def add_movement(self, info: dict[str, Union[str, float, int]]) -> None:
-        """ Add movement methods to this object
+    def add_action(self, info: dict[str, Union[str, float, int]]) -> None:
+        """ Add action methods to this object
 
         Pre-condition: info contains all of the following
             1. name of the action accessed by "name"
@@ -579,11 +589,13 @@ class Staminaized(Regenable):
         Optional:
             1. Texture of the action accessed by "texture"
             2. The extendability of the action accessed by "extendable"
+            3. Flag for repeated resource consumption accessed by "consumption"
         """
         name = info['name']
         default = {
             'texture': BASIC_ATTACK_TEXTURE,
-            'extendable': False
+            'extendable': False,
+            'consumption': False
         }
         for attr in default:
             if attr not in info:
@@ -635,8 +647,8 @@ class Manaized(Staminaized):
         Staminaized.resource_consume(self, name)
         self.mana -= self.mana_costs[name]
 
-    def add_movement(self, info: dict[str, Union[str, float, int]]) -> None:
-        """ Add movement methods to this object
+    def add_action(self, info: dict[str, Union[str, float, int]]) -> None:
+        """ Add action methods to this object
 
         Pre-condition: info contains all of the following
             1. name of the action accessed by "name"
@@ -649,9 +661,10 @@ class Manaized(Staminaized):
 
         Optional:
             1. Texture of the action accessed by "texture"
+            2. The extendability of the action accessed by "extendable"
         """
         self.mana_costs[info['name']] = info['mana_cost']
-        Staminaized.add_movement(self, info)
+        Staminaized.add_action(self, info)
 
 
 class CombatStats:

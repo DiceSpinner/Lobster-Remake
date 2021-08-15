@@ -358,9 +358,8 @@ class Level:
         # execute particle actions
         for i in range(Staminaized.action_queue.get_size()):
             particle, args, name = Staminaized.action_queue.dequeue()
-            particle.execute_movement(name, args)
+            particle.execute_action(name, args)
         Staminaized.action_queue.reset()
-
         for i in updates:
             i.update_status()
         active_map.update_contents()

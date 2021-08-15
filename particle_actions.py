@@ -1,6 +1,5 @@
 import pygame
 import math
-
 import particles
 from particles import *
 from utilities import CombatStats, Living, Manaized, Staminaized, \
@@ -25,7 +24,7 @@ class Illuminator(ActiveParticle, Lightable):
             'time': 1,
             'method': self._illuminate
         }
-        self.add_movement(il)
+        self.add_action(il)
 
     def _illuminate(self):
         tiles = self.get_tiles_in_contact()
@@ -41,7 +40,7 @@ class Puppet(Illuminator):
 
     === Public Attributes ===
     _ self_destroy: Ticks before self-destruction
-    - owner: The particle that started this puppet
+    - owner: The particle that created this puppet
     - sync_offset: The position difference between self and the owner particle
 
     === Private Attributes ===
@@ -72,7 +71,7 @@ class Puppet(Illuminator):
                 raise InvalidConstructionInfo
 
     def action(self):
-        self.enqueue_movement("illuminate", {})
+        self.enqueue_action("illuminate", {})
 
     def delay_destruction(self, frames: int) -> None:
         """ Delay self-destruction for a certain amount of frames """
@@ -88,6 +87,7 @@ class Puppet(Illuminator):
         self.map_name = self.owner.map_name
         self.x = self.owner.x + self.sync_offset[0]
         self.y = self.owner.y + self.sync_offset[1]
+        self.update_map_position()
 
 
 class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
@@ -160,16 +160,28 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
             "name": 'guard',
             'stamina_cost': 0,
             'mana_cost': 0,
-            'cooldown': 3,
+            'cooldown': GUARD_COOLDOWN,
             'priority': DEFENSE_PRIORITY,
-            'time': 3,
+            'time': GUARD_DURATION,
             'method': self.guard,
             'texture': GUARD_TEXTURE,
             'extendable': True
         }
-        moves = [basic_attack, move, guard]
+        speed_up = {
+            'name': "speed_up",
+            'stamina_cost': round(40 / FPS, 2),
+            'mana_cost': 0,
+            'cooldown': 3,
+            'priority': BUFF_PRIORITY,
+            'time': 2,
+            'method': self.speed_up,
+            'extendable': True,
+            'consumption': True
+        }
+
+        moves = [basic_attack, move, guard, speed_up]
         for move in moves:
-            self.add_movement(move)
+            self.add_action(move)
 
     def can_act(self, name: str) -> bool:
         if Manaized.can_act(self, name):
@@ -288,6 +300,9 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
                             total = 0
                             break
         return total, current
+
+    def speed_up(self):
+        self.add_stats({'speed': 100})
 
     def move(self, direction: Union[float, Positional]) -> None:
         self.apply_velocity(direction)
@@ -413,7 +428,7 @@ class Fireball(StandardMoveSet, Illuminator):
         if not self.destroyed:
             self.count_down()
             self.move(self.direction)
-            self.enqueue_movement("illuminate", {})
+            self.enqueue_action("illuminate", {})
         else:
             self.basic_attack(None)
             self.remove()
@@ -458,7 +473,7 @@ class ProjectileThrowable(ActiveParticle, CombatStats, Manaized):
             }
         ]
         for move in moves:
-            self.add_movement(move)
+            self.add_action(move)
 
     def fireball(self) -> None:
         """ Damage every nearby creatures inside the explosion range of
