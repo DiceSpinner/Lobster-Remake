@@ -2,7 +2,7 @@ from __future__ import annotations
 import pygame
 import math
 from typing import List, Tuple, Union, Optional, Any, Set
-from utilities import Positional, Movable, Collidable, Lightable, Living, \
+from utilities import Positional, Displacable, Collidable, Lightable, Living, \
     Directional, get_direction, Staminaized
 from bool_expr import BoolExpr, construct_from_str
 from settings import *
@@ -10,7 +10,7 @@ from error import InvalidConstructionInfo, UnknownTextureError
 from data_structures import Queue
 
 
-class Particle(Collidable):
+class Particle(Collidable, Directional):
     """
     Description: Customized sprites
 
@@ -31,7 +31,6 @@ class Particle(Collidable):
     light_particles = {}
     raw_textures = {}
     textures = {}
-    rotation = {}
     sounds = {}
     game_map = {}  # dict[str, List[List[List[int]]]]
     Scale = 1
@@ -64,11 +63,28 @@ class Particle(Collidable):
         Particle.particle_group[self.id] = self
         Particle.new_particles[self.id] = self
 
+    def aim(self, obj: Positional) -> None:
+        cx = self.x + self.diameter / 2 - 1
+        cy = self.y + self.diameter / 2 - 1
+        obj = (obj.x, obj.y)
+        if isinstance(obj, Collidable):
+            obj = (obj.x + obj.diameter / 2 - 1, obj.y + obj.diameter / 2 - 1)
+        self.direction = get_direction((cx, cy), obj)
+
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
+        radius = self.diameter / 2 * Particle.Scale
+        texture = self.get_texture()
+        centre_x = location[0] + radius - 1
+        centre_y = location[1] + radius - 1
+        size = texture.get_size()
+        cx = centre_x - int(size[0] / 2) + 1
+        cy = centre_y - int(size[1] / 2) + 1
+        screen.blit(texture, [cx, cy])
+
+    def get_texture(self):
         d = math.ceil(self.get_stat("diameter") * Particle.Scale)
-        texture = get_texture_by_info(self.texture, (d, d), 0, 255)
-        screen.blit(texture, location)
+        return get_texture_by_info(self.texture, (d, d), self.direction, 255)
 
     def remove(self):
         """ Remove this particle from the game """
@@ -98,41 +114,82 @@ class Particle(Collidable):
         return self.name
 
 
-class DirectionalParticle(Particle, Directional):
-    """ Collidable particles that implements the directional interface """
+class DisplacableParticle(Displacable, Particle):
+    """ Particles that can change its position
+    """
 
-    def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
-        super().__init__(info)
-        if self.texture not in Particle.rotation:
-            Particle.rotation[self.texture] = {self.diameter: {}}
+    def calculate_order(self) -> Tuple[float, float, int, int, int, int]:
+        x_d = abs(self.get_stat('vx'))
+        y_d = abs(self.get_stat('vy'))
+        c_x = int(self.x)
+        c_y = int(self.y)
+        if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
+            return 0, 0, 0, 0, 0, 0
+        if self.get_stat('vx') == 0:
+            x_time = 0
+            y_time = 1
+        elif self.get_stat('vy') == 0:
+            x_time = 1
+            y_time = 0
+        elif abs(self.get_stat('vx')) > abs(self.get_stat('vy')):
+            x_time = int(round(abs(self.get_stat('vx')) / abs(self.get_stat(
+                'vy')), 0))
+            y_time = 1
+        elif abs(self.get_stat('vx')) < abs(self.get_stat('vy')):
+            x_time = 1
+            y_time = int(round(abs(self.get_stat('vy')) / abs(self.get_stat(
+                'vx')), 0))
         else:
-            Particle.rotation[self.texture][self.diameter] = {}
+            x_time, y_time = 1, 1
+        return x_d, y_d, c_x, c_y, x_time, y_time
 
-    def aim(self, obj: Positional) -> None:
-        cx = self.x + self.diameter / 2 - 1
-        cy = self.y + self.diameter / 2 - 1
-        obj = (obj.x, obj.y)
-        if isinstance(obj, Collidable):
-            obj = (obj.x + obj.diameter / 2 - 1, obj.y + obj.diameter / 2 - 1)
-        self.direction = get_direction((cx, cy), obj)
+    def direction_increment(self, time: int, direction: str, total: float,
+                            current: int) \
+            -> Tuple[float, float]:
+        """ Change the position of the particle towards the given direction """
+        vel = self.get_stat('v' + direction)
 
-    def display(self, screen: pygame.Surface,
-                location: Tuple[int, int]) -> None:
-        radius = self.diameter / 2 * Particle.Scale
-        texture = self.get_texture()
-        centre_x = location[0] + radius - 1
-        centre_y = location[1] + radius - 1
-        size = texture.get_size()
-        cx = centre_x - int(size[0] / 2) + 1
-        cy = centre_y - int(size[1] / 2) + 1
-        screen.blit(texture, [cx, cy])
+        for i in range(time):
+            if total > 0:
+                if total >= 1:
+                    value = vel / abs(vel)
+                    total -= 1
+                else:
+                    value = vel - int(vel)
+                    total = 0
+                setattr(self, direction, getattr(self, direction) + value)
+                self.update_map_position()
+                n = int(getattr(self, direction))
+                if abs(n - current) >= 1:
+                    particles = get_particles_by_tiles(
+                        self.map_name,
+                        colliding_tiles_generator(self.x, self.y,
+                                                  self.diameter))
+                    for particle in particles:
+                        particle = Particle.particle_group[particle]
+                        if not particle.id == self.id and particle.solid and \
+                                self.solid \
+                                and self.detect_collision(particle):
+                            setattr(self, direction, getattr(self, direction) -
+                                    value)
+                            self.update_map_position()
+                            setattr(self, "v" + direction, 0)
+                            return 0, current
+        return total, current
 
-    def get_texture(self):
-        d = math.ceil(self.get_stat("diameter") * Particle.Scale)
-        return get_texture_by_info(self.texture, (d, d), self.direction, 255)
+    def update_status(self):
+        super().update_status()
+        if self.get_stat("vx") == 0 and self.get_stat("vy") == 0:
+            return
+        x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
+        while x_d > 0 or y_d > 0:
+            x_d, c_x = self.direction_increment(x_time, "x",
+                                                x_d, c_x)
+            y_d, c_y = self.direction_increment(y_time, "y",
+                                                y_d, c_y)
 
 
-class Block(Particle, Lightable):
+class Block(Lightable, Particle):
     """
 
     """
@@ -173,7 +230,7 @@ class Block(Particle, Lightable):
                         queue.enqueue((p2.id, block.id))
 
 
-class ActiveParticle(DirectionalParticle, Staminaized):
+class ActiveParticle(Staminaized, Particle):
     """
     Description: Particles that can act on its own
     """
@@ -199,7 +256,7 @@ class ActiveParticle(DirectionalParticle, Staminaized):
                     yield Block.block_group[ps]
 
     def remove(self):
-        DirectionalParticle.remove(self)
+        Particle.remove(self)
         ActiveParticle.ap_group.pop(self.id, None)
 
 
@@ -270,10 +327,6 @@ class Creature(ActiveParticle, Living):
     def remove(self):
         ActiveParticle.remove(self)
         Creature.creature_group.pop(self.id, None)
-
-    def update_status(self):
-        Living.update_status(self)
-        self.cooldown_countdown()
 
 
 def calculate_colliding_tiles(x: float, y: float, diameter: int,

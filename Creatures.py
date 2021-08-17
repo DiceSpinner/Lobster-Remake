@@ -71,16 +71,12 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator, Creature):
         if pressed_keys[pygame.K_q]:
             self.enqueue_action('fireball', {})
 
-    def update_status(self):
-        Creature.update_status(self)
-        StandardMoveSet.update_status(self)
-
     def remove(self):
         Creature.remove(self)
         Player.player_group.pop(self.id, None)
 
 
-class NPC(StandardMoveSet, ProjectileThrowable, Creature):
+class NPC(Creature, StandardMoveSet, ProjectileThrowable):
     """ Description: Non-Player Character class
 
     Additional Attributes:
@@ -95,13 +91,12 @@ class NPC(StandardMoveSet, ProjectileThrowable, Creature):
 
     def action(self) -> None:
         # self.enqueue_action('basic_attack', {})
-        # self.enqueue_action("move", {'direction': self.direction})
-        # self.enqueue_action('fireball', {})
+        self.direction += 1
+        if self.direction == 360:
+            self.direction = 0
+        self.enqueue_action("move", {'direction': self.direction})
+        self.enqueue_action('fireball', {})
         pass
-
-    def update_status(self):
-        Creature.update_status(self)
-        StandardMoveSet.update_status(self)
 
     def remove(self):
         Creature.remove(self)

@@ -4,7 +4,7 @@ import pygame
 from effect import *
 from particles import *
 from Creatures import NPC, Player
-from utilities import Positional, Movable, Collidable, Regenable, Staminaized, \
+from utilities import Positional, Displacable, Collidable, Regenable, Staminaized, \
     BufferedStats, UpdateReq
 from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
@@ -101,7 +101,7 @@ class Camera(Positional):
     def __init__(self, particle: Particle,
                  height: int, width: int,
                  game_maps: dict[str, GameMap]) -> None:
-        Positional.__init__(self, {"map_name": particle.map_name})
+        Positional.__init__(self, **{"map_name": particle.map_name})
         self.particle = particle
         self.game_maps = game_maps
         self.width = width
@@ -318,10 +318,9 @@ class Level:
                                   self._game_maps)
         player_key = list(Player.player_group)[0]
         player = Player.player_group[player_key]
-
         # mouse tracking
         mouse_pos = pygame.mouse.get_pos()
-        pos = Positional({})
+        pos = Positional()
         pos.x = mouse_pos[0] / Particle.Scale + self._camera.x
         pos.y = mouse_pos[1] / Particle.Scale + self._camera.y
         player.aim(pos)
@@ -469,6 +468,7 @@ class Game:
                 self._levels.append(Level(level_file.readlines()))
 
     def run(self) -> None:
+        print(Player.__mro__)
         clock = pygame.time.Clock()
         running = True
         pygame.mouse.set_visible(False)
@@ -477,7 +477,6 @@ class Game:
         cursor_image = pygame.transform.scale(cursor_image, (24, 24))
         while running:
             clock.tick(self.frame_rate)
-            # print(clock.get_fps())
             self._screen.fill((0, 0, 0))
             if self._level_selecting:
                 self._selected_level = 0

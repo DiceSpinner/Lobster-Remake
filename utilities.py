@@ -19,6 +19,8 @@ def compare_by_execution_priority(i1: Tuple[Staminaized, dict[str, Any], str],
 class UpdateReq:
     """ Units that requires updates every frame should implement this interface
 
+    === Public Attributes ===
+    - update_priority: The update priority of this unit
     """
 
     def __init__(self, place_holder: Optional[Any]) -> None:
@@ -90,7 +92,7 @@ class Positional(BufferedStats):
     x: float
     y: float
 
-    def __init__(self, info: dict[str, Union[str, int]]) -> None:
+    def __init__(self, **info) -> None:
         attr = ['x', 'y', 'map_name']
         for item in attr:
             if item not in info:
@@ -101,7 +103,7 @@ class Positional(BufferedStats):
         super().__init__(info)
 
 
-class Movable(BufferedStats):
+class Displacable(BufferedStats, UpdateReq):
     """ An interface that provides movement attributes.
 
     === Public Attributes ===
@@ -115,17 +117,15 @@ class Movable(BufferedStats):
     vy: float
     ax: float
     ay: float
-    speed: float
 
     def __init__(self, info: dict[str, Union[str, float]]) -> None:
         super().__init__(info)
-        attr = ['vx', 'vy', 'ax', 'ay', 'speed']
+        attr = ['vx', 'vy', 'ax', 'ay']
         default = {
             'vx': 0,
             'vy': 0,
             'ax': 0,
             'ay': 0,
-            'speed': 2
         }
         for key in default:
             if key not in info:
@@ -151,7 +151,7 @@ class Directional(Positional):
     direction: float
 
     def __init__(self, info: dict[str, Union[str, float]]) -> None:
-        super().__init__(info)
+        super().__init__(**info)
         attr = ['direction']
         default = {
             'direction': 0
@@ -417,7 +417,7 @@ class Living(Regenable):
         return self.get_stat('death').eval(vars(self))
 
     def update_status(self):
-        Regenable.update_status(self)
+        super().update_status()
         self.calculate_health()
         if self.is_dead():
             self.die()
@@ -605,8 +605,8 @@ class Staminaized(Regenable):
         self.actions[name] = act
 
     def update_status(self):
-        Regenable.update_status(self)
         self.cooldown_countdown()
+        super().update_status()
 
 
 class Manaized(Staminaized):
