@@ -76,7 +76,7 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator, Creature):
         Player.player_group.pop(self.id, None)
 
 
-class NPC(Creature, StandardMoveSet, ProjectileThrowable):
+class NPC(StandardMoveSet, ProjectileThrowable, Creature):
     """ Description: Non-Player Character class
 
     Additional Attributes:

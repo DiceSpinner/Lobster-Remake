@@ -10,7 +10,7 @@ from error import InvalidConstructionInfo
 from settings import *
 
 
-class Illuminator(DisplacableParticle, ActiveParticle, Lightable):
+class Illuminator(ActiveParticle, Lightable):
     """ Active particles that are able to illuminate nearby tiles """
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
@@ -199,26 +199,25 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
         Staminaized.cooldown_countdown(self)
         self._attack_counter += 1
 
-    def basic_attack(self, target=None) -> bool:
+    def basic_attack(self) -> bool:
         """ Damage every nearby creatures within the attack range """
         diameter = self.get_stat('diameter')
         attack_range = self.get_stat('attack_range')
-        c1x = self.x - 1 + diameter / 2
-        c1y = self.y - 1 + diameter / 2
-        c2x = c1x - attack_range
-        c2y = c1y - attack_range
-        offset = - 1 + diameter / 2 - attack_range
+        offset = diameter / 2 - attack_range
+        cx = self.x + offset
+        cy = self.y + offset
         info = {
-            'diameter': attack_range * 2 + 1,
+            'diameter': attack_range * 2,
             'shape': self.shape,
             'texture': self.actions['basic_attack'].action_texture,
             'owner': self,
             'light_source': BASIC_ATTACK_BRIGHTNESS,
-            'x': c2x,
-            'y': c2y,
+            'x': cx,
+            'y': cy,
             'solid': False,
             'map_name': self.map_name,
-            'sync_offset': (offset, offset)
+            'sync_offset': (offset, offset),
+            'update_priority': BASIC_ATTACK_TEXTURE_PRIORITY
         }
         collision_box = Puppet(info)
         self.animations["basic_attack"] = collision_box
@@ -261,7 +260,8 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
                 'solid': False,
                 'map_name': self.map_name,
                 'self_destroy': 3,
-                'sync_offset': (-diameter / 2, -diameter / 2)
+                'sync_offset': (-diameter / 2, -diameter / 2),
+                'update_priority': 1
             }
             self.animations['guard'] = Puppet(info)
         else:
@@ -280,11 +280,11 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
         """ This method must be called every frame to fully delete
         self-destroyed puppets
         """
-        super().update_status()
         for particle in self.animations.copy():
             p = self.animations[particle]
             if p.id not in Particle.particle_group:
                 self.animations.pop(particle, None)
+        super().update_status()
 
     def _is_target(self, particle: Particle) -> bool:
         return self.target.eval(vars(particle))
@@ -373,7 +373,7 @@ class Fireball(StandardMoveSet, Illuminator):
             self.count_down()
             self.enqueue_action("illuminate", {})
         else:
-            self.basic_attack(None)
+            self.basic_attack()
             self.remove()
 
 

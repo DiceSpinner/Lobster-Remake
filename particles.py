@@ -33,6 +33,7 @@ class Particle(Collidable, Directional):
     textures = {}
     sounds = {}
     game_map = {}  # dict[str, List[List[List[int]]]]
+    tile_map = {}
     Scale = 1
 
     id: int
@@ -115,8 +116,7 @@ class Particle(Collidable, Directional):
 
 
 class DisplacableParticle(Displacable, Particle):
-    """ Particles that can change its position
-    """
+    """ Particles that can change its position """
 
     def calculate_order(self) -> Tuple[float, float, int, int, int, int]:
         x_d = abs(self.get_stat('vx'))
@@ -178,15 +178,14 @@ class DisplacableParticle(Displacable, Particle):
         return total, current
 
     def update_status(self):
+        if not (self.get_stat("vx") == 0 and self.get_stat("vy") == 0):
+            x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
+            while x_d > 0 or y_d > 0:
+                x_d, c_x = self.direction_increment(x_time, "x",
+                                                    x_d, c_x)
+                y_d, c_y = self.direction_increment(y_time, "y",
+                                                    y_d, c_y)
         super().update_status()
-        if self.get_stat("vx") == 0 and self.get_stat("vy") == 0:
-            return
-        x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
-        while x_d > 0 or y_d > 0:
-            x_d, c_x = self.direction_increment(x_time, "x",
-                                                x_d, c_x)
-            y_d, c_y = self.direction_increment(y_time, "y",
-                                                y_d, c_y)
 
 
 class Block(Lightable, Particle):
@@ -366,7 +365,7 @@ def get_particles_by_tiles(map_name: str,
 
 
 def get_particles_in_radius(particle: Particle, radius=1, tp=None, corner=True) -> \
-        List[Block]:
+        List[Particle]:
     """ Return particles in the given radius through Generator """
     row = int(particle.y // TILE_SIZE)
     col = int(particle.x // TILE_SIZE)
@@ -391,15 +390,16 @@ def get_particles_in_radius(particle: Particle, radius=1, tp=None, corner=True) 
         for y in range(start_col, end_col + 1):
             if not corner and abs(y - col) > (radius - dif):
                 continue
-            ps = Particle.game_map[particle.map_name][x][y]
-            for p in ps.copy():
-                item = Particle.particle_group[p]
-                if item.id not in yielded:
-                    if tp is not None:
-                        if isinstance(item, tp):
-                            yielded.add(item.id)
-                            yield item
-                    else:
+            if tp == Block:
+                yield Block.block_group[Particle.tile_map[particle.map_name][x][y]]
+            else:
+                ps = Particle.game_map[particle.map_name][x][y]
+                for p in ps.copy():
+                    item = Particle.particle_group[p]
+                    if item.id not in yielded:
+                        if tp is not None:
+                            if not isinstance(item, tp):
+                                continue
                         yielded.add(item.id)
                         yield item
 

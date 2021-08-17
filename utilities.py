@@ -23,8 +23,11 @@ class UpdateReq:
     - update_priority: The update priority of this unit
     """
 
-    def __init__(self, place_holder: Optional[Any]) -> None:
-        pass
+    def __init__(self, info: dict[str, Any]) -> None:
+        if 'update_priority' not in info:
+            info['update_priority'] = 0
+        self.update_priority = info['update_priority']
+        super().__init__(info)
 
     def update_status(self):
         raise NotImplementedError
@@ -103,7 +106,7 @@ class Positional(BufferedStats):
         super().__init__(info)
 
 
-class Displacable(BufferedStats, UpdateReq):
+class Displacable(UpdateReq, BufferedStats):
     """ An interface that provides movement attributes.
 
     === Public Attributes ===
@@ -307,7 +310,7 @@ class Lightable(BufferedStats):
         super().__init__(info)
 
 
-class Regenable(BufferedStats, UpdateReq):
+class Regenable(UpdateReq, BufferedStats):
     """ Description: Interface that provides access to resource regeneration
 
     === Public Attributes ===
@@ -417,6 +420,7 @@ class Living(Regenable):
         return self.get_stat('death').eval(vars(self))
 
     def update_status(self):
+        """ This method must be called last in the inheritance chain """
         super().update_status()
         self.calculate_health()
         if self.is_dead():

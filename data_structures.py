@@ -107,25 +107,25 @@ class PriorityQueue:
     === Private attributes ===
     _items: Items stored in this queue. The first item is being represented by
     the first item in the list.
-    _comparator: The callable function used to sort items
+    _higher_priority: The callable function used to sort items
     """
     _items: List[Any]
-    _comparator: Callable[[Any, Any], bool]
+    _higher_priority: Callable[[Any, Any], bool]
 
     def __init__(self, comparator: Callable) -> None:
-        self._comparator = comparator
+        self._higher_priority = comparator
         self._items = []
 
     def enqueue(self, item: Any) -> None:
         for i in range(len(self._items)):
             it = self._items[i]
-            if self._comparator(item, it):
+            if self._higher_priority(item, it):
                 self._items.insert(i, item)
                 return
         self._items.append(item)
 
     def dequeue(self) -> Any:
-        return self._items.pop()
+        return self._items.pop(0)
 
     def is_empty(self) -> bool:
         return len(self._items) == 0

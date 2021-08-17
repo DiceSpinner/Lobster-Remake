@@ -4,7 +4,8 @@ import pygame
 from effect import *
 from particles import *
 from Creatures import NPC, Player
-from utilities import Positional, Displacable, Collidable, Regenable, Staminaized, \
+from utilities import Positional, Displacable, Collidable, Regenable, \
+    Staminaized, \
     BufferedStats, UpdateReq
 from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
@@ -23,8 +24,9 @@ class GameMap:
     tile_size: the size of each tile in pixels
     height: height of the map (in tiles)
     width: width of the map (in tiles)
-    blocks: blocks of the map
-    entities: creatures and items inside the map
+    all_particles: All particles on this map
+    content: All particles on this map stored in map format
+    tiles: All tiles on this map
     """
     name: str
     tile_size: int
@@ -32,6 +34,7 @@ class GameMap:
     height: int
     all_particles: set[int]
     content: List[List[Set[int]]]
+    tiles: List[List[int]]
 
     def __init__(self, location: str,
                  look_up: dict[str, PredefinedParticle]) -> None:
@@ -46,7 +49,10 @@ class GameMap:
             self.all_particles = set()
             self.content = [[set() for j in range(self.width)]
                             for i in range(self.height)]
+            self.tiles = [[-1 for j in range(self.width)]
+                          for i in range(self.height)]
             Particle.game_map[self.name] = self.content
+            Particle.tile_map[self.name] = self.tiles
             for i in range(len(rows)):
                 pos_y = i * TILE_SIZE
                 row = rows[i].rstrip()
@@ -60,7 +66,9 @@ class GameMap:
                         pre_p.info['y'] = pos_y
                         pre_p.info['map_name'] = self.name
                         particle_class = globals()[pre_p.info['class']]
-                        particle_class(pre_p.info.copy())
+                        particle = particle_class(pre_p.info.copy())
+                        if isinstance(particle, Block):
+                            self.tiles[i][j] = particle.id
 
     def update_contents(self) -> None:
         for particle in self.all_particles.copy():
@@ -207,8 +215,7 @@ class Camera(Positional):
         """ Display the content onto the screen by their priority
         """
         displaying, shades = self.get_displaying_particles()
-
-        queue = PriorityQueue(priority_over_id)
+        queue = PriorityQueue(lower_priority_over_id)
         new_dict = {}
         for item in displaying:
             new_dict[item[0]] = (item[1], item[2])
@@ -344,13 +351,13 @@ class Level:
                                                    True)
         # particle status update
         tiles = []
-        updates = []
+        updates = PriorityQueue(lower_update_priority)
         for particle in active_particles:
             if isinstance(particle, ActiveParticle):
                 # queue up actions
                 particle.action()
             if isinstance(particle, UpdateReq):
-                updates.append(particle)
+                updates.enqueue(particle)
             if isinstance(particle, Block):
                 tiles.append(particle)
 
@@ -359,8 +366,8 @@ class Level:
             particle, args, name = Staminaized.action_queue.dequeue()
             particle.execute_action(name, args)
         Staminaized.action_queue.reset()
-        for i in updates:
-            i.update_status()
+        while not updates.is_empty():
+            updates.dequeue().update_status()
         active_map.update_contents()
 
         # lighting
@@ -468,7 +475,6 @@ class Game:
                 self._levels.append(Level(level_file.readlines()))
 
     def run(self) -> None:
-        print(Player.__mro__)
         clock = pygame.time.Clock()
         running = True
         pygame.mouse.set_visible(False)
@@ -497,21 +503,23 @@ class Game:
         pygame.quit()
 
 
-def compare_by_id(p1: Particle, p2: Particle) -> bool:
-    """ Sort by non-decreasing order """
+def higher_id(p1: Particle, p2: Particle) -> bool:
     return p1.id > p2.id
 
 
-def compare_by_display_priority(p1: Particle, p2: Particle) -> bool:
-    """ Sort by non-decreasing order """
-    return p1.display_priority > p2.display_priority
+def lower_display_priority(p1: Particle, p2: Particle) -> bool:
+    return p1.display_priority < p2.display_priority
 
 
-def priority_over_id(p1: Particle, p2: Particle) -> bool:
+def lower_update_priority(p1: UpdateReq, p2: UpdateReq) -> bool:
+    return p1.update_priority < p2.update_priority
+
+
+def lower_priority_over_id(p1: Particle, p2: Particle) -> bool:
     """ Sort by non-decreasing order """
     if p1.display_priority == p2.display_priority:
         return p1.id > p2.id
-    return p1.display_priority > p2.display_priority
+    return p1.display_priority < p2.display_priority
 
 
 def _load_assets():
