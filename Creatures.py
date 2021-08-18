@@ -38,6 +38,8 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator, Creature):
             effective_directions.append(pygame.K_d)
         elif not pressed_keys[pygame.K_d] and pressed_keys[pygame.K_a]:
             effective_directions.append(pygame.K_a)
+        if pressed_keys[pygame.K_LSHIFT]:
+            self.enqueue_action("speed_up", {})
         if len(effective_directions) > 0:
             if pygame.K_w in effective_directions:
                 if pygame.K_a in effective_directions:
@@ -57,21 +59,17 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator, Creature):
                 direction = 180
             else:
                 direction = 0
-            self.enqueue_movement('move', {"direction": direction})
+            self.enqueue_action('move', {"direction": direction})
         # light
         if self.light_on:
-            self.enqueue_movement('illuminate', {})
+            self.enqueue_action('illuminate', {})
         # attack
         if self.mouse_buttons[0] == 1:
-            self.enqueue_movement('basic_attack', {})
+            self.enqueue_action('basic_attack', {})
         elif self.mouse_buttons[2] == 1:
-            self.enqueue_movement('guard', {})
+            self.enqueue_action('guard', {})
         if pressed_keys[pygame.K_q]:
-            self.enqueue_movement('fireball', {})
-
-    def update_status(self):
-        Creature.update_status(self)
-        StandardMoveSet.update_status(self)
+            self.enqueue_action('fireball', {})
 
     def remove(self):
         Creature.remove(self)
@@ -92,13 +90,13 @@ class NPC(StandardMoveSet, ProjectileThrowable, Creature):
         NPC.npc_group[self.id] = self
 
     def action(self) -> None:
-        self.enqueue_movement('basic_attack', {})
-        # self.enqueue_movement("move", {'direction': self.direction})
-        # self.enqueue_movement('fireball', {})
-
-    def update_status(self):
-        Creature.update_status(self)
-        StandardMoveSet.update_status(self)
+        # self.enqueue_action('basic_attack', {})
+        self.direction += 1
+        if self.direction == 360:
+            self.direction = 0
+        self.enqueue_action("move", {'direction': self.direction})
+        self.enqueue_action('fireball', {})
+        pass
 
     def remove(self):
         Creature.remove(self)

@@ -1,17 +1,14 @@
 import math
-
 import pygame
 from effect import *
 from particles import *
 from Creatures import NPC, Player
-from utilities import Positional, Movable, Collidable, Regenable, Staminaized, \
-    BufferedStats, UpdateReq
+from utilities import Positional, Staminaized, BufferedStats, UpdateReq
 from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
 from settings import *
 from data_structures import PriorityQueue
 from error import CollidedParticleNameError
-from particle_actions import Fireball
 import os
 
 
@@ -23,8 +20,9 @@ class GameMap:
     tile_size: the size of each tile in pixels
     height: height of the map (in tiles)
     width: width of the map (in tiles)
-    blocks: blocks of the map
-    entities: creatures and items inside the map
+    all_particles: All particles on this map
+    content: All particles on this map stored in map format
+    tiles: All tiles on this map
     """
     name: str
     tile_size: int
@@ -32,6 +30,7 @@ class GameMap:
     height: int
     all_particles: set[int]
     content: List[List[Set[int]]]
+    tiles: List[List[int]]
 
     def __init__(self, location: str,
                  look_up: dict[str, PredefinedParticle]) -> None:
@@ -46,7 +45,10 @@ class GameMap:
             self.all_particles = set()
             self.content = [[set() for j in range(self.width)]
                             for i in range(self.height)]
+            self.tiles = [[-1 for j in range(self.width)]
+                          for i in range(self.height)]
             Particle.game_map[self.name] = self.content
+            Particle.tile_map[self.name] = self.tiles
             for i in range(len(rows)):
                 pos_y = i * TILE_SIZE
                 row = rows[i].rstrip()
@@ -60,7 +62,9 @@ class GameMap:
                         pre_p.info['y'] = pos_y
                         pre_p.info['map_name'] = self.name
                         particle_class = globals()[pre_p.info['class']]
-                        particle_class(pre_p.info.copy())
+                        particle = particle_class(pre_p.info.copy())
+                        if isinstance(particle, Block):
+                            self.tiles[i][j] = particle.id
 
     def update_contents(self) -> None:
         for particle in self.all_particles.copy():
@@ -101,7 +105,7 @@ class Camera(Positional):
     def __init__(self, particle: Particle,
                  height: int, width: int,
                  game_maps: dict[str, GameMap]) -> None:
-        Positional.__init__(self, {"map_name": particle.map_name})
+        Positional.__init__(self, **{"map_name": particle.map_name})
         self.particle = particle
         self.game_maps = game_maps
         self.width = width
@@ -168,25 +172,11 @@ class Camera(Positional):
                     if isinstance(item, Block):
                         display_x = block_x
                         display_y = block_y
-                        if item.get_stat("brightness") > 0:
+                        brightness = item.get_stat("brightness")
+                        if brightness > 0:
                             displaying.add((idti, display_x, display_y))
-                            tiles = get_particles_in_radius(item, 1, Block,
-                                                            True)
-                            for t in tiles:
-                                if t.x > item.x:
-                                    dx = display_x + size
-                                elif t.x == item.x:
-                                    dx = display_x
-                                else:
-                                    dx = display_x - size
-                                if t.y > item.y:
-                                    dy = display_y + size
-                                elif t.y == item.y:
-                                    dy = display_y
-                                else:
-                                    dy = display_y - size
-                                shades.add(((dx, dy), 255 -
-                                            t.get_stat("brightness")))
+                        shades.add(((display_x, display_y), 255 -
+                                    brightness))
                     else:
                         bx = j * TILE_SIZE
                         by = i * TILE_SIZE
@@ -207,8 +197,7 @@ class Camera(Positional):
         """ Display the content onto the screen by their priority
         """
         displaying, shades = self.get_displaying_particles()
-
-        queue = PriorityQueue(priority_over_id)
+        queue = PriorityQueue(lower_priority_over_id)
         new_dict = {}
         for item in displaying:
             new_dict[item[0]] = (item[1], item[2])
@@ -318,10 +307,9 @@ class Level:
                                   self._game_maps)
         player_key = list(Player.player_group)[0]
         player = Player.player_group[player_key]
-
         # mouse tracking
         mouse_pos = pygame.mouse.get_pos()
-        pos = Positional({})
+        pos = Positional()
         pos.x = mouse_pos[0] / Particle.Scale + self._camera.x
         pos.y = mouse_pos[1] / Particle.Scale + self._camera.y
         player.aim(pos)
@@ -345,24 +333,23 @@ class Level:
                                                    True)
         # particle status update
         tiles = []
-        updates = []
+        updates = PriorityQueue(lower_update_priority)
         for particle in active_particles:
             if isinstance(particle, ActiveParticle):
                 # queue up actions
                 particle.action()
             if isinstance(particle, UpdateReq):
-                updates.append(particle)
+                updates.enqueue(particle)
             if isinstance(particle, Block):
                 tiles.append(particle)
 
         # execute particle actions
         for i in range(Staminaized.action_queue.get_size()):
             particle, args, name = Staminaized.action_queue.dequeue()
-            particle.execute_movement(name, args)
+            particle.execute_action(name, args)
         Staminaized.action_queue.reset()
-
-        for i in updates:
-            i.update_status()
+        while not updates.is_empty():
+            updates.dequeue().update_status()
         active_map.update_contents()
 
         # lighting
@@ -478,7 +465,6 @@ class Game:
         cursor_image = pygame.transform.scale(cursor_image, (24, 24))
         while running:
             clock.tick(self.frame_rate)
-            # print(clock.get_fps())
             self._screen.fill((0, 0, 0))
             if self._level_selecting:
                 self._selected_level = 0
@@ -499,21 +485,23 @@ class Game:
         pygame.quit()
 
 
-def compare_by_id(p1: Particle, p2: Particle) -> bool:
-    """ Sort by non-decreasing order """
+def higher_id(p1: Particle, p2: Particle) -> bool:
     return p1.id > p2.id
 
 
-def compare_by_display_priority(p1: Particle, p2: Particle) -> bool:
-    """ Sort by non-decreasing order """
-    return p1.display_priority > p2.display_priority
+def lower_display_priority(p1: Particle, p2: Particle) -> bool:
+    return p1.display_priority < p2.display_priority
 
 
-def priority_over_id(p1: Particle, p2: Particle) -> bool:
+def lower_update_priority(p1: UpdateReq, p2: UpdateReq) -> bool:
+    return p1.update_priority < p2.update_priority
+
+
+def lower_priority_over_id(p1: Particle, p2: Particle) -> bool:
     """ Sort by non-decreasing order """
     if p1.display_priority == p2.display_priority:
         return p1.id > p2.id
-    return p1.display_priority > p2.display_priority
+    return p1.display_priority < p2.display_priority
 
 
 def _load_assets():

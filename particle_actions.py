@@ -1,10 +1,9 @@
 import pygame
 import math
-
 import particles
 from particles import *
 from utilities import CombatStats, Living, Manaized, Staminaized, \
-    Movable, get_direction, Positional, UpdateReq
+    Displacable, get_direction, Positional, UpdateReq
 from bool_expr import BoolExpr, construct_from_str
 from typing import Union, Tuple, List
 from error import InvalidConstructionInfo
@@ -25,7 +24,7 @@ class Illuminator(ActiveParticle, Lightable):
             'time': 1,
             'method': self._illuminate
         }
-        self.add_movement(il)
+        self.add_action(il)
 
     def _illuminate(self):
         tiles = self.get_tiles_in_contact()
@@ -41,7 +40,7 @@ class Puppet(Illuminator):
 
     === Public Attributes ===
     _ self_destroy: Ticks before self-destruction
-    - owner: The particle that started this puppet
+    - owner: The particle that created this puppet
     - sync_offset: The position difference between self and the owner particle
 
     === Private Attributes ===
@@ -72,7 +71,7 @@ class Puppet(Illuminator):
                 raise InvalidConstructionInfo
 
     def action(self):
-        self.enqueue_movement("illuminate", {})
+        self.enqueue_action("illuminate", {})
 
     def delay_destruction(self, frames: int) -> None:
         """ Delay self-destruction for a certain amount of frames """
@@ -88,9 +87,10 @@ class Puppet(Illuminator):
         self.map_name = self.owner.map_name
         self.x = self.owner.x + self.sync_offset[0]
         self.y = self.owner.y + self.sync_offset[1]
+        self.update_map_position()
 
 
-class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
+class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized):
     """ Standard movesets that covers basic moving, offensive and defensive
     movements, must be inherited by other sub-creature classes in order to
     utilize these methods.
@@ -100,7 +100,8 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
     - attack_speed: The number of basic attacks can be performed in a second
     - target: A bool expression that gives info about target
     - attack_texture: The texture of attacks
-    - basic_attack_animation: id of the a
+    - animations: Animations for actions
+    - speed: Speed of the particle
 
     === Private Attributes ===
     - _attack_counter: The counter for basic attack cooldown
@@ -110,13 +111,15 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
     attack_texture: dict[str, pygame.Surface]
     target: BoolExpr
     animations: dict[str, Puppet]
+    speed: float
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
-        attr = ['attack_speed', 'attack_range', 'target']
+        attr = ['attack_speed', 'attack_range', 'target', 'speed']
         default = {
             'attack_speed': DEFAULT_ATTACK_SPEED,
             'attack_range': DEFAULT_ATTACK_RANGE,
-            'target': construct_from_str(DEFAULT_TARGET)
+            'target': construct_from_str(DEFAULT_TARGET),
+            'speed': 2
         }
         for key in default:
             if key not in info:
@@ -160,16 +163,28 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
             "name": 'guard',
             'stamina_cost': 0,
             'mana_cost': 0,
-            'cooldown': 3,
+            'cooldown': GUARD_COOLDOWN,
             'priority': DEFENSE_PRIORITY,
-            'time': 3,
+            'time': GUARD_DURATION,
             'method': self.guard,
             'texture': GUARD_TEXTURE,
             'extendable': True
         }
-        moves = [basic_attack, move, guard]
+        speed_up = {
+            'name': "speed_up",
+            'stamina_cost': round(40 / FPS, 2),
+            'mana_cost': 0,
+            'cooldown': 3,
+            'priority': BUFF_PRIORITY,
+            'time': 2,
+            'method': self.speed_up,
+            'extendable': True,
+            'consumption': True
+        }
+
+        moves = [basic_attack, move, guard, speed_up]
         for move in moves:
-            self.add_movement(move)
+            self.add_action(move)
 
     def can_act(self, name: str) -> bool:
         if Manaized.can_act(self, name):
@@ -184,26 +199,25 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
         Staminaized.cooldown_countdown(self)
         self._attack_counter += 1
 
-    def basic_attack(self, target=None) -> bool:
+    def basic_attack(self) -> bool:
         """ Damage every nearby creatures within the attack range """
         diameter = self.get_stat('diameter')
         attack_range = self.get_stat('attack_range')
-        c1x = self.x - 1 + diameter / 2
-        c1y = self.y - 1 + diameter / 2
-        c2x = c1x - attack_range
-        c2y = c1y - attack_range
-        offset = - 1 + diameter / 2 - attack_range
+        offset = diameter / 2 - attack_range
+        cx = self.x + offset
+        cy = self.y + offset
         info = {
-            'diameter': attack_range * 2 + 1,
+            'diameter': attack_range * 2,
             'shape': self.shape,
             'texture': self.actions['basic_attack'].action_texture,
             'owner': self,
             'light_source': BASIC_ATTACK_BRIGHTNESS,
-            'x': c2x,
-            'y': c2y,
+            'x': cx,
+            'y': cy,
             'solid': False,
             'map_name': self.map_name,
-            'sync_offset': (offset, offset)
+            'sync_offset': (offset, offset),
+            'update_priority': BASIC_ATTACK_TEXTURE_PRIORITY
         }
         collision_box = Puppet(info)
         self.animations["basic_attack"] = collision_box
@@ -218,8 +232,10 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
         self._attack_counter = 0
         return True
 
-    def apply_velocity(self, direction: Union[float, Positional]) -> None:
-        """ Move towards the target direction or object """
+    def speed_up(self):
+        self.add_stats({'speed': 100})
+
+    def move(self, direction: Union[float, Positional]) -> None:
         if isinstance(direction, Positional):
             direction = get_direction((self.x, self.y), (direction.x,
                                                          direction.y))
@@ -229,76 +245,6 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
             {'vx': round(speed * round(math.cos(direction), 2), 2)})
         self.add_stats(
             {'vy': round(- speed * round(math.sin(direction), 2), 2)})
-
-    def calculate_order(self) -> Tuple[float, float, int, int, int, int]:
-        x_d = abs(self.get_stat('vx'))
-        y_d = abs(self.get_stat('vy'))
-        c_x = int(self.x)
-        c_y = int(self.y)
-        if self.get_stat('vx') == 0 and self.get_stat('vy') == 0:
-            return 0, 0, 0, 0, 0, 0
-        if self.get_stat('vx') == 0:
-            x_time = 0
-            y_time = 1
-        elif self.get_stat('vy') == 0:
-            x_time = 1
-            y_time = 0
-        elif abs(self.get_stat('vx')) > abs(self.get_stat('vy')):
-            x_time = int(round(abs(self.get_stat('vx')) / abs(self.get_stat(
-                'vy')), 0))
-            y_time = 1
-        elif abs(self.get_stat('vx')) < abs(self.get_stat('vy')):
-            x_time = 1
-            y_time = int(round(abs(self.get_stat('vy')) / abs(self.get_stat(
-                'vx')), 0))
-        else:
-            x_time, y_time = 1, 1
-        return x_d, y_d, c_x, c_y, x_time, y_time
-
-    def direction_increment(self, time: int, direction: str, total: float,
-                            current: int) \
-            -> Tuple[float, float]:
-        """ Change the position of the particle towards the given direction """
-        vel = self.get_stat('v' + direction)
-
-        for i in range(time):
-            if total > 0:
-                if total >= 1:
-                    value = vel / abs(vel)
-                    total -= 1
-                else:
-                    value = vel - int(vel)
-                    total = 0
-                setattr(self, direction, getattr(self, direction) + value)
-                self.update_map_position()
-                n = int(getattr(self, direction))
-                if abs(n - current) >= 1:
-                    particles = get_particles_by_tiles(
-                        self.map_name,
-                        colliding_tiles_generator(self.x, self.y,
-                                                  self.diameter))
-                    for particle in particles:
-                        particle = Particle.particle_group[particle]
-                        if not particle.id == self.id and particle.solid and \
-                                self.solid \
-                                and self.detect_collision(particle):
-                            setattr(self, direction, getattr(self, direction) -
-                                    value)
-                            self.update_map_position()
-                            total = 0
-                            break
-        return total, current
-
-    def move(self, direction: Union[float, Positional]) -> None:
-        self.apply_velocity(direction)
-        if self.get_stat("vx") == 0 and self.get_stat("vy") == 0:
-            return
-        x_d, y_d, c_x, c_y, x_time, y_time = self.calculate_order()
-        while x_d > 0 or y_d > 0:
-            x_d, c_x = self.direction_increment(x_time, "x",
-                                                x_d, c_x)
-            y_d, c_y = self.direction_increment(y_time, "y",
-                                                y_d, c_y)
 
     def guard(self):
         if "guard" not in self.animations:
@@ -314,7 +260,8 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
                 'solid': False,
                 'map_name': self.map_name,
                 'self_destroy': 3,
-                'sync_offset': (-diameter / 2, -diameter / 2)
+                'sync_offset': (-diameter / 2, -diameter / 2),
+                'update_priority': 1
             }
             self.animations['guard'] = Puppet(info)
         else:
@@ -337,6 +284,7 @@ class StandardMoveSet(ActiveParticle, CombatStats, Manaized, Movable):
             p = self.animations[particle]
             if p.id not in Particle.particle_group:
                 self.animations.pop(particle, None)
+        super().update_status()
 
     def _is_target(self, particle: Particle) -> bool:
         return self.target.eval(vars(particle))
@@ -372,6 +320,13 @@ class Fireball(StandardMoveSet, Illuminator):
         self.ignore.substitute(vars(self))
         self.destroyed = False
         self._self_destroy_counter = 0
+        self.calculate_velocity()
+
+    def calculate_velocity(self):
+        speed = round(self.get_stat('speed') / FPS, 2)
+        direction = math.radians(self.direction)
+        self.vx += round(speed * round(math.cos(direction), 2), 2)
+        self.vy += -round(speed * round(math.sin(direction), 2), 2)
 
     def count_down(self):
         self._self_destroy_counter += 1
@@ -382,6 +337,9 @@ class Fireball(StandardMoveSet, Illuminator):
                             current: int) -> Tuple[float, float]:
         """ Increment the position of the particle in given direction """
         vel = 'v' + direction
+        if self.destroyed:
+            setattr(self, "v" + direction, 0)
+            return 0, current
         for i in range(time):
             if total > 0:
                 if total >= 1:
@@ -394,11 +352,11 @@ class Fireball(StandardMoveSet, Illuminator):
                 self.update_map_position()
                 n = int(getattr(self, direction))
                 if abs(n - current) >= 1:
-                    particles = get_particles_by_tiles(
+                    ps = get_particles_by_tiles(
                         self.map_name,
                         colliding_tiles_generator(self.x, self.y,
                                                   self.diameter))
-                    for particle in particles:
+                    for particle in ps:
                         particle = Particle.particle_group[particle]
                         attr = vars(particle)
                         attr['obj'] = particle
@@ -406,16 +364,16 @@ class Fireball(StandardMoveSet, Illuminator):
                                 (self._is_target(particle) or particle.solid) \
                                 and self.detect_collision(particle):
                             self.destroyed = True
-                            break
+                            setattr(self, "v" + direction, 0)
+                            return 0, current
         return total, current
 
     def action(self, optional=None):
         if not self.destroyed:
             self.count_down()
-            self.move(self.direction)
-            self.enqueue_movement("illuminate", {})
+            self.enqueue_action("illuminate", {})
         else:
-            self.basic_attack(None)
+            self.basic_attack()
             self.remove()
 
 
@@ -458,7 +416,7 @@ class ProjectileThrowable(ActiveParticle, CombatStats, Manaized):
             }
         ]
         for move in moves:
-            self.add_movement(move)
+            self.add_action(move)
 
     def fireball(self) -> None:
         """ Damage every nearby creatures inside the explosion range of

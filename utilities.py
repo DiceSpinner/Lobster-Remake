@@ -19,10 +19,15 @@ def compare_by_execution_priority(i1: Tuple[Staminaized, dict[str, Any], str],
 class UpdateReq:
     """ Units that requires updates every frame should implement this interface
 
+    === Public Attributes ===
+    - update_priority: The update priority of this unit
     """
 
-    def __init__(self, place_holder: Optional[Any]) -> None:
-        pass
+    def __init__(self, info: dict[str, Any]) -> None:
+        if 'update_priority' not in info:
+            info['update_priority'] = 0
+        self.update_priority = info['update_priority']
+        super().__init__(info)
 
     def update_status(self):
         raise NotImplementedError
@@ -90,7 +95,7 @@ class Positional(BufferedStats):
     x: float
     y: float
 
-    def __init__(self, info: dict[str, Union[str, int]]) -> None:
+    def __init__(self, **info) -> None:
         attr = ['x', 'y', 'map_name']
         for item in attr:
             if item not in info:
@@ -101,7 +106,7 @@ class Positional(BufferedStats):
         super().__init__(info)
 
 
-class Movable(BufferedStats):
+class Displacable(UpdateReq, BufferedStats):
     """ An interface that provides movement attributes.
 
     === Public Attributes ===
@@ -115,17 +120,15 @@ class Movable(BufferedStats):
     vy: float
     ax: float
     ay: float
-    speed: float
 
     def __init__(self, info: dict[str, Union[str, float]]) -> None:
         super().__init__(info)
-        attr = ['vx', 'vy', 'ax', 'ay', 'speed']
+        attr = ['vx', 'vy', 'ax', 'ay']
         default = {
             'vx': 0,
             'vy': 0,
             'ax': 0,
             'ay': 0,
-            'speed': 2
         }
         for key in default:
             if key not in info:
@@ -151,7 +154,7 @@ class Directional(Positional):
     direction: float
 
     def __init__(self, info: dict[str, Union[str, float]]) -> None:
-        super().__init__(info)
+        super().__init__(**info)
         attr = ['direction']
         default = {
             'direction': 0
@@ -307,7 +310,7 @@ class Lightable(BufferedStats):
         super().__init__(info)
 
 
-class Regenable(BufferedStats, UpdateReq):
+class Regenable(UpdateReq, BufferedStats):
     """ Description: Interface that provides access to resource regeneration
 
     === Public Attributes ===
@@ -417,7 +420,8 @@ class Living(Regenable):
         return self.get_stat('death').eval(vars(self))
 
     def update_status(self):
-        Regenable.update_status(self)
+        """ This method must be called last in the inheritance chain """
+        super().update_status()
         self.calculate_health()
         if self.is_dead():
             self.die()
@@ -438,7 +442,8 @@ class Action:
     - action_priority: The execution priority of this action
     - action_texture: Names of assets of Visual Displays of this action
     - extendable: Whether this action can be extended for a longer duration
-
+    - repeated_resource_consumption: (Only when extendable), determines whether
+        this actions consumes resource on each extended call
     === Private Attributes ===
     - _cooldown_counter: The counter of the cooldown
     """
@@ -450,6 +455,7 @@ class Action:
     _cooldown_counter: int
     method: Callable
     extendable: bool
+    repeated_resource_consumption: bool
 
     def __init__(self, info: dict[str, Any]) -> None:
         self.name = info['name']
@@ -460,6 +466,7 @@ class Action:
         self.method = info['method']
         self.action_texture = info['texture']
         self.extendable = info['extendable']
+        self.repeated_resource_consumption = info['consumption']
 
     def can_act(self) -> bool:
         # Check if the action is on cooldown
@@ -523,7 +530,7 @@ class Staminaized(Regenable):
         for name in self.actions:
             self.actions[name].count()
 
-    def enqueue_movement(self, name: str, args: dict[str, Any]) -> None:
+    def enqueue_action(self, name: str, args: dict[str, Any]) -> None:
         """ Add the action to the action queue if it's not being executed.
         Otherwise if the action is extendable. When that occurs, extends its
         duration for 1 frame.
@@ -531,6 +538,12 @@ class Staminaized(Regenable):
         if name in self.executing:
             action = self.actions[name]
             if action.extendable:
+                # extends the action by 1 frame
+                if action.repeated_resource_consumption:
+                    if self.stamina >= self.stamina_costs[name]:
+                        self.resource_consume(name)
+                    else:
+                        return
                 key = self.executing[name][1]
                 weight = Staminaized.action_queue.get_weight(key)
                 Staminaized.action_queue.set_weight(key, weight + 1)
@@ -538,14 +551,15 @@ class Staminaized(Regenable):
                 key = self.executing[name][1]
                 self.executing[name] = (timer, key)
         elif self.can_act(name):
+            # enqueue the action
             key = Staminaized.action_queue.enqueue((self, args, name),
                                                    self.actions[
                                                        name].action_time)
             self.executing[name] = (0, key)
             self.resource_consume(name)
 
-    def execute_movement(self, name: str, args: dict[str, Any]):
-        """ Execute movements in self.executing """
+    def execute_action(self, name: str, args: dict[str, Any]):
+        """ Execute actions in self.executing """
         key = self.executing[name][1]
         timer = self.executing[name][0]
         self.executing[name] = (timer + 1, key)
@@ -562,11 +576,11 @@ class Staminaized(Regenable):
             pass
 
     def resource_consume(self, name: str):
-        """ Consume the resource for performing this action """
+        """ Consume the resource for executing this action """
         self.stamina -= self.stamina_costs[name]
 
-    def add_movement(self, info: dict[str, Union[str, float, int]]) -> None:
-        """ Add movement methods to this object
+    def add_action(self, info: dict[str, Union[str, float, int]]) -> None:
+        """ Add action methods to this object
 
         Pre-condition: info contains all of the following
             1. name of the action accessed by "name"
@@ -579,11 +593,13 @@ class Staminaized(Regenable):
         Optional:
             1. Texture of the action accessed by "texture"
             2. The extendability of the action accessed by "extendable"
+            3. Flag for repeated resource consumption accessed by "consumption"
         """
         name = info['name']
         default = {
             'texture': BASIC_ATTACK_TEXTURE,
-            'extendable': False
+            'extendable': False,
+            'consumption': False
         }
         for attr in default:
             if attr not in info:
@@ -593,8 +609,8 @@ class Staminaized(Regenable):
         self.actions[name] = act
 
     def update_status(self):
-        Regenable.update_status(self)
         self.cooldown_countdown()
+        super().update_status()
 
 
 class Manaized(Staminaized):
@@ -635,8 +651,8 @@ class Manaized(Staminaized):
         Staminaized.resource_consume(self, name)
         self.mana -= self.mana_costs[name]
 
-    def add_movement(self, info: dict[str, Union[str, float, int]]) -> None:
-        """ Add movement methods to this object
+    def add_action(self, info: dict[str, Union[str, float, int]]) -> None:
+        """ Add action methods to this object
 
         Pre-condition: info contains all of the following
             1. name of the action accessed by "name"
@@ -649,9 +665,10 @@ class Manaized(Staminaized):
 
         Optional:
             1. Texture of the action accessed by "texture"
+            2. The extendability of the action accessed by "extendable"
         """
         self.mana_costs[info['name']] = info['mana_cost']
-        Staminaized.add_movement(self, info)
+        Staminaized.add_action(self, info)
 
 
 class CombatStats:

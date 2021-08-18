@@ -15,14 +15,14 @@ Implemented Functionalities (with regards to the original version):
 - Particle Action System (Improved)
 - Living Particles
 - Omni-Directional Particle Movement (Improved)
-- Melee/Ranged AOE Attack
+- Melee/Ranged AOE Attack 
+- Guarding (new)
 - Basic Player Control (Improved)
 
 Planned Functionalities:
 - Layered tile maps
 - Item/Inventory
 - Particle Animation
-- Guarding (Particle Action)
 - Interactable Particles
 - Sounds/Music
 - GUI Title Screen, Pause Menu, Inventory Menu and etc.
