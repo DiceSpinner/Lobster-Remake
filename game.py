@@ -1,18 +1,14 @@
 import math
-
 import pygame
 from effect import *
 from particles import *
 from Creatures import NPC, Player
-from utilities import Positional, Displacable, Collidable, Regenable, \
-    Staminaized, \
-    BufferedStats, UpdateReq
+from utilities import Positional, Staminaized, BufferedStats, UpdateReq
 from bool_expr import BoolExpr
 from predefined_particle import PredefinedParticle
 from settings import *
 from data_structures import PriorityQueue
 from error import CollidedParticleNameError
-from particle_actions import Fireball
 import os
 
 
@@ -176,25 +172,11 @@ class Camera(Positional):
                     if isinstance(item, Block):
                         display_x = block_x
                         display_y = block_y
-                        if item.get_stat("brightness") > 0:
+                        brightness = item.get_stat("brightness")
+                        if brightness > 0:
                             displaying.add((idti, display_x, display_y))
-                            tiles = get_particles_in_radius(item, 1, Block,
-                                                            True)
-                            for t in tiles:
-                                if t.x > item.x:
-                                    dx = display_x + size
-                                elif t.x == item.x:
-                                    dx = display_x
-                                else:
-                                    dx = display_x - size
-                                if t.y > item.y:
-                                    dy = display_y + size
-                                elif t.y == item.y:
-                                    dy = display_y
-                                else:
-                                    dy = display_y - size
-                                shades.add(((dx, dy), 255 -
-                                            t.get_stat("brightness")))
+                        shades.add(((display_x, display_y), 255 -
+                                    brightness))
                     else:
                         bx = j * TILE_SIZE
                         by = i * TILE_SIZE

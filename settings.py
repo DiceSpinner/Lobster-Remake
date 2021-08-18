@@ -35,7 +35,7 @@ DEFAULT_HEALTH_REGEN = 10
 # Staminaized interface
 DEFAULT_STAMINA = 100
 DEFAULT_MAX_STAMINA = 100
-DEFAULT_STAMINA_REGEN = 100
+DEFAULT_STAMINA_REGEN = 25
 DEFAULT_ACTION_TIMER = 1  # Actions that last 1 frame
 
 # Manaized interface
@@ -48,7 +48,7 @@ DEFAULT_ATTACK_DAMAGE = 40
 DEFAULT_ATTACK_RANGE = TILE_SIZE // 2
 DEFAULT_ATTACK_SPEED = 1  # attacks per sec
 DEFAULT_ATTACK_WIND_UP = 0.3
-DEFAULT_ATTACK_STAMINA_COST = 0  # stamina consumed per attack
+DEFAULT_ATTACK_STAMINA_COST = 45  # stamina consumed per attack
 DEFAULT_ATTACK_MANA_COST = 0
 DEFAULT_TARGET = "( not id = self.id )"
 BASIC_ATTACK_TEXTURE = 'attack_circle.png'

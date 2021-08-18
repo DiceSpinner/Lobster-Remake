@@ -391,7 +391,8 @@ def get_particles_in_radius(particle: Particle, radius=1, tp=None, corner=True) 
             if not corner and abs(y - col) > (radius - dif):
                 continue
             if tp == Block:
-                yield Block.block_group[Particle.tile_map[particle.map_name][x][y]]
+                yield Block.block_group[Particle.tile_map[particle.map_name][x][
+                    y]]
             else:
                 ps = Particle.game_map[particle.map_name][x][y]
                 for p in ps.copy():
