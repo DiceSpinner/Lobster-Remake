@@ -52,6 +52,27 @@ class Inventory:
 
     === Public Attributes ===
     - size: Size of this inventory
-    - 
+    - items: Items stored in this inventory
 
+    === Representation Invariant ===
+    - size >= 0
     """
+    size: int
+    items: List[Item]
+
+    def __init__(self, size: int) -> None:
+        self.size = size
+        self.items = []
+
+    def add(self, item: Item) -> None:
+        """ Add items to this inventory """
+        same_items = []
+        for i in self.items:
+            if i == item:
+                same_items.append(i)
+        for i in same_items:
+            i.merge(item)
+            if item.stack == 0:
+                return
+        if len(self.items) < self.size:
+            self.items.append(item)

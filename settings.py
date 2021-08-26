@@ -12,25 +12,33 @@ SQUARE = 'square'
 CIRCLE = 'circle'
 SHAPES = [SQUARE, CIRCLE]
 
-PLACE_HOLDER = 'self.'
-EMPTY_CONDITION = 'empty'
-
 #
 PARTICLE_UPDATE_RADIUS = 12
 
 #
+SELF_PREFIX = "self"
+OTHER_PREFIX = "other"
+
+#
 MAX_CAMERA_SCALE = 1.5
 MIN_CAMERA_SCALE = 1
+
+#
+INTERACT_RADIUS = int(TILE_SIZE // 2)
 
 # particle attributes
 DEFAULT_DISPLAY_PRIORITY = 0
 DEFAULT_PARTICLE_TEXTURE = "Lobster_64.png"
 DEFAULT_PARTICLE_NAME = "particle"  # used while not reading data from map files
 
+#
+DEFAULT_SPEED = 250
+
 # Living interface
 DEFAULT_HEALTH = 100
 DEFAULT_MAX_HEALTH = 100
 DEFAULT_HEALTH_REGEN = 10
+DEFAULT_DEATH_CONDITION = "( health <= 0 )"
 
 # Staminaized interface
 DEFAULT_STAMINA = 100
@@ -50,7 +58,7 @@ DEFAULT_ATTACK_SPEED = 1  # attacks per sec
 DEFAULT_ATTACK_WIND_UP = 0.3
 DEFAULT_ATTACK_STAMINA_COST = 45  # stamina consumed per attack
 DEFAULT_ATTACK_MANA_COST = 0
-DEFAULT_TARGET = "( not id = self.id )"
+DEFAULT_TARGET = "( not ( " + OTHER_PREFIX + "_id = " + SELF_PREFIX + "_id ) )"
 BASIC_ATTACK_TEXTURE = 'attack_circle.png'
 BASIC_ATTACK_BRIGHTNESS = 256
 BASIC_ATTACK_TEXTURE_PRIORITY = 1
