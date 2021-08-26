@@ -14,34 +14,6 @@ class CollidedParticleNameError(Exception):
         return 'Predefined particle name collision!'
 
 
-class IllegalOperatorError(Exception):
-    """Exception raised when the input operator is illegal."""
-
-    def __str__(self) -> str:
-        """ Return a string representation of this error. """
-        return 'Illegal operator!'
-
-
-class NoneConditionError(Exception):
-    """Exception raised when the input condition is None while root
-    is not an operator.
-    """
-
-    def __str__(self) -> str:
-        """ Return a string representation of this error. """
-        return 'The input condition must not be None when the root is' \
-               'not an operator!'
-
-
-class UnsubstitutedConditionError(Exception):
-    """Exception raised when the condition is not substituted.
-    """
-
-    def __str__(self) -> str:
-        """ Return a string representation of this error. """
-        return 'The condition must be substituted before evaluated'
-
-
 class EffectSubjectError(Exception):
     """Exception raised when trying to apply an effect on a particle that's
     not its subject.
@@ -68,15 +40,6 @@ class UnknownShapeError(Exception):
     def __str__(self) -> str:
         """ Return a string representation of this error. """
         return 'Object shape unknown.'
-
-
-class MainConnectiveError(Exception):
-    """Exception raised when there's no main connective in the bool expr.
-    """
-
-    def __str__(self) -> str:
-        """ Return a string representation of this error. """
-        return 'Main connective DNE'
 
 
 class AttackOnCoolDownError(Exception):
@@ -142,3 +105,13 @@ class UnknownTextureError(Exception):
     def __str__(self) -> str:
         """ Return a string representation of this error. """
         return 'The given texture name does not exist!'
+
+
+class UnknownAttributeError(Exception):
+    """ Exception raised when one of the variables of the expression tree used
+    for objects evaluation is unknown.
+    """
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'All variables must have prefixes for evaluation!'

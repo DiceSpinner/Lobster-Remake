@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Union, List, Optional, Any, Tuple, Callable
 from error import UnknownShapeError, InvalidAttrTypeError
-from bool_expr import BoolExpr, construct_from_list, construct_from_str
+from expression_trees import ObjectAttributeEvaluator
 from settings import *
 from data_structures import WeightedPriorityQueue
 import math
@@ -278,6 +278,36 @@ class Collidable(Positional, BufferedStats):
         return other._square_circle(self)
 
 
+class Interactive(BufferedStats):
+    """ Description: Interactive units
+
+    === Public Attributes ===
+    - interact_radius: The radius which this unit can be interacted with
+
+    Representation Invariants:
+        0<= light_source <= 255
+        0<= brightness <= 255
+    """
+    interact_radius: int
+    condition: ObjectAttributeEvaluator
+
+    def __init__(self, info: dict[str, Union[int, str]]) -> None:
+        attr = ['interact_radius', 'condition']
+        default = {
+            'interact_radius': INTERACT_RADIUS,
+            'condition': ObjectAttributeEvaluator("")
+        }
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+        for a in attr:
+            setattr(self, a, info[a])
+        super().__init__(info)
+
+    def interact(self, other: Interactive):
+        raise NotImplementedError
+
+
 class Lightable(BufferedStats):
     """ Description: Light interface
 
@@ -378,7 +408,7 @@ class Living(Regenable):
     """
     health: float
     max_health: float
-    death: BoolExpr
+    death: ObjectAttributeEvaluator
     incoming_damage: float
     incoming_healing: float
 
@@ -389,7 +419,7 @@ class Living(Regenable):
             'health': DEFAULT_HEALTH,
             'health_regen': DEFAULT_HEALTH_REGEN,
             'max_health': DEFAULT_MAX_HEALTH,
-            'death': construct_from_str("( not health > 0 )"),
+            'death': ObjectAttributeEvaluator(DEFAULT_DEATH_CONDITION),
             'incoming_damage': 0,
             'incoming_healing': 0
         }
@@ -417,7 +447,7 @@ class Living(Regenable):
 
     def is_dead(self) -> bool:
         """ Check whether this object is dead """
-        return self.get_stat('death').eval(vars(self))
+        return self.get_stat('death').eval(self)
 
     def update_status(self):
         """ This method must be called last in the inheritance chain """

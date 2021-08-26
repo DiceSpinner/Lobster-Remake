@@ -4,7 +4,7 @@ from effect import *
 from particles import *
 from Creatures import NPC, Player
 from utilities import Positional, Staminaized, BufferedStats, UpdateReq
-from bool_expr import BoolExpr
+from expression_trees import MultiObjectsEvaluator
 from predefined_particle import PredefinedParticle
 from settings import *
 from data_structures import PriorityQueue
@@ -234,7 +234,7 @@ class Level:
     - difficulty must be an integer from 0 - 3
     """
     difficulty: int
-    goal: BoolExpr
+    goal: MultiObjectsEvaluator
     _game_maps: dict[str, GameMap]
     _camera: Camera
     _map_names: List[str]

@@ -2,9 +2,10 @@ import pygame
 import math
 import particles
 from particles import *
-from utilities import CombatStats, Living, Manaized, Staminaized, \
-    Displacable, get_direction, Positional, UpdateReq
-from bool_expr import BoolExpr, construct_from_str
+from utilities import CombatStats, Living, Manaized, Staminaized, get_direction\
+    , Positional
+from expression_trees import BoolExpr, MultiObjectsEvaluator, \
+    ObjectAttributeEvaluator
 from typing import Union, Tuple, List
 from error import InvalidConstructionInfo
 from settings import *
@@ -98,7 +99,7 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
     === Public Attributes ===
     - attack_range: The range of basic attacks
     - attack_speed: The number of basic attacks can be performed in a second
-    - target: A bool expression that gives info about target
+    - target: Description of the target of the attacks
     - attack_texture: The texture of attacks
     - animations: Animations for actions
     - speed: Speed of the particle
@@ -109,7 +110,7 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
     attack_range: int
     attack_speed: float
     attack_texture: dict[str, pygame.Surface]
-    target: BoolExpr
+    target: MultiObjectsEvaluator
     animations: dict[str, Puppet]
     speed: float
 
@@ -118,8 +119,8 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
         default = {
             'attack_speed': DEFAULT_ATTACK_SPEED,
             'attack_range': DEFAULT_ATTACK_RANGE,
-            'target': construct_from_str(DEFAULT_TARGET),
-            'speed': 2
+            'target': MultiObjectsEvaluator(DEFAULT_TARGET),
+            'speed': DEFAULT_SPEED
         }
         for key in default:
             if key not in info:
@@ -127,7 +128,6 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
         for a in attr:
             setattr(self, a, info[a])
         super().__init__(info)
-        self.target.substitute(vars(self))
 
         optional = {
             'basic_attack_texture': BASIC_ATTACK_TEXTURE,
@@ -226,7 +226,7 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
                              get_nearby_particles(collision_box)))
         for entity in living:
             entity = Particle.particle_group[entity]
-            if self._is_target(entity) and \
+            if self.is_target(entity) and \
                     collision_box.detect_collision(entity):
                 entity.register_damage(self.get_stat('attack_power'))
         self._attack_counter = 0
@@ -286,8 +286,12 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
                 self.animations.pop(particle, None)
         super().update_status()
 
-    def _is_target(self, particle: Particle) -> bool:
-        return self.target.eval(vars(particle))
+    def is_target(self, particle: Particle) -> bool:
+        contract = {
+            SELF_PREFIX: self,
+            OTHER_PREFIX: particle
+        }
+        return self.target.eval(contract)
 
 
 class Fireball(StandardMoveSet, Illuminator):
@@ -302,7 +306,7 @@ class Fireball(StandardMoveSet, Illuminator):
     """
     self_destruction: int
     destroyed: bool
-    ignore: BoolExpr
+    ignore: MultiObjectsEvaluator
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple, List]]) \
             -> None:
@@ -310,14 +314,13 @@ class Fireball(StandardMoveSet, Illuminator):
         attr = ['self_destruction', 'ignore']
         default = {
             'self_destruction': DEFAULT_PROJECTILE_COUNTDOWN,
-            'ignore': construct_from_str(DEFAULT_TARGET)
+            'ignore': MultiObjectsEvaluator(DEFAULT_TARGET)
         }
         for item in default:
             if item not in info:
                 info[item] = default[item]
         for a in attr:
             setattr(self, a, info[a])
-        self.ignore.substitute(vars(self))
         self.destroyed = False
         self._self_destroy_counter = 0
         self.calculate_velocity()
@@ -358,15 +361,20 @@ class Fireball(StandardMoveSet, Illuminator):
                                                   self.diameter))
                     for particle in ps:
                         particle = Particle.particle_group[particle]
-                        attr = vars(particle)
-                        attr['obj'] = particle
-                        if not self.ignore.eval(attr) and \
-                                (self._is_target(particle) or particle.solid) \
+                        if not self.ignore.eval(particle) and \
+                                (self.is_target(particle) or particle.solid) \
                                 and self.detect_collision(particle):
                             self.destroyed = True
                             setattr(self, "v" + direction, 0)
                             return 0, current
         return total, current
+
+    def is_target(self, particle: Particle) -> bool:
+        contract = {
+            SELF_PREFIX: self,
+            OTHER_PREFIX: particle
+        }
+        return isinstance(particle, Creature) and self.target.eval(contract)
 
     def action(self, optional=None):
         if not self.destroyed:
@@ -387,7 +395,7 @@ class ProjectileThrowable(ActiveParticle, CombatStats, Manaized):
             None:
         attr = ['target', 'fireball_explosion_range']
         default = {
-            'target': construct_from_str(DEFAULT_TARGET),
+            'target': MultiObjectsEvaluator(DEFAULT_TARGET),
             "fireball_explosion_range": FIREBALL_EXPLOSION_RANGE
         }
         for key in default:
@@ -396,7 +404,6 @@ class ProjectileThrowable(ActiveParticle, CombatStats, Manaized):
         for a in attr:
             setattr(self, a, info[a])
         super().__init__(info)
-        self.target.substitute(vars(self))
         optional = {
             'fireball_texture': FIREBALL_TEXTURE
         }
@@ -427,16 +434,14 @@ class ProjectileThrowable(ActiveParticle, CombatStats, Manaized):
         ball_size = int(self.get_stat('fireball_explosion_range'))
         c2x = c1x - ball_size // 2
         c2y = c1y - ball_size // 2
-        condition = "( id = self.id or id = " + str(self.id) + " )"
-        target_condition = "( obj -> particles.Creature and " + str(
-            self.target) + " )"
+        condition = "( id = " + str(self.id) + " )"
         info = {
             'diameter': ball_size,
             'shape': self.shape,
-            'ignore': construct_from_str(condition),
+            'ignore': ObjectAttributeEvaluator(condition),
             'light_source': FIREBALL_BRIGHTNESS,
             'texture': self.actions['fireball'].action_texture,
-            'target': construct_from_str(target_condition),
+            'target': self.target,
             'attack_damage': self.get_stat('ability_power'),
             'attack_range': self.get_stat('fireball_explosion_range'),
             'speed': DEFAULT_PROJECTILE_SPEED,

@@ -68,7 +68,7 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator, Creature):
             self.enqueue_action('basic_attack', {})
         elif self.mouse_buttons[2] == 1:
             self.enqueue_action('guard', {})
-        if pressed_keys[pygame.K_q]:
+        if pressed_keys[pygame.K_SPACE]:
             self.enqueue_action('fireball', {})
 
     def remove(self):

@@ -1,6 +1,6 @@
 from typing import Union, List, Tuple, Any
-from error import UnknownTypeError, IllegalOperatorError
-from bool_expr import construct_from_str, BoolExpr
+from error import UnknownTypeError
+from expression_trees import ObjectAttributeEvaluator
 import math
 import settings
 
@@ -18,7 +18,7 @@ class PredefinedParticle:
         - Particle: display_priority, texture
         - Creature/Block: diameter, brightness, light_power, health, shape
     """
-    info: dict[str, Union[str, int, float, bool, List, Tuple, BoolExpr]]
+    info: dict[str, Any]
 
     def __init__(self, path: str) -> None:
         """ Construct the dictionary representation of the particle with the
@@ -56,8 +56,8 @@ class PredefinedParticle:
                 elif data_type == 'tuple':
                     value = value[1:len(value) - 1]
                     self.info[attr] = tuple(map(int, value.split(',')))
-                elif data_type == 'BoolExpr':
-                    self.info[attr] = construct_from_str(value)
+                elif data_type == 'ObjectAttributeEvaluator':
+                    self.info[attr] = ObjectAttributeEvaluator(value)
                 elif data_type == 'const':
                     self.info[attr] = evaluate(value)
                 elif data_type == 'const_int':
@@ -88,4 +88,3 @@ def evaluate(item: str) -> Any:
             return getattr(settings, item[0]) + float(item[2])
         if item[1] == '-':
             return getattr(settings, item[0]) - float(item[2])
-        raise IllegalOperatorError

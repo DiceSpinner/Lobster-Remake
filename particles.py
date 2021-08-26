@@ -4,7 +4,6 @@ import math
 from typing import List, Tuple, Union, Optional, Any, Set
 from utilities import Positional, Displacable, Collidable, Lightable, Living, \
     Directional, get_direction, Staminaized
-from bool_expr import BoolExpr, construct_from_str
 from settings import *
 from error import InvalidConstructionInfo, UnknownTextureError
 from data_structures import Queue
