@@ -457,6 +457,7 @@ class Game:
                 self._levels.append(Level(level_file.readlines()))
 
     def run(self) -> None:
+        print(Player.__mro__)
         clock = pygame.time.Clock()
         running = True
         pygame.mouse.set_visible(False)

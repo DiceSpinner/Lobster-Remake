@@ -1,10 +1,11 @@
 from particle_actions import StandardMoveSet, ProjectileThrowable, Illuminator
-from particles import Creature
+from particles import Creature, AnimatedParticle
 from typing import List, Tuple, Union, Optional
 import pygame
 
 
-class Player(StandardMoveSet, ProjectileThrowable, Illuminator, Creature):
+class Player(StandardMoveSet, ProjectileThrowable, Illuminator,
+             AnimatedParticle, Creature):
     """
     Description: Player class
 
@@ -94,7 +95,7 @@ class NPC(StandardMoveSet, ProjectileThrowable, Creature):
         self.direction += 1
         if self.direction == 360:
             self.direction = 0
-        self.enqueue_action("move", {'direction': self.direction})
+        # self.enqueue_action("move", {'direction': self.direction})
         self.enqueue_action('fireball', {})
         pass
 

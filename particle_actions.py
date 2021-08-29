@@ -6,12 +6,12 @@ from utilities import CombatStats, Living, Manaized, Staminaized, get_direction\
     , Positional
 from expression_trees import BoolExpr, MultiObjectsEvaluator, \
     ObjectAttributeEvaluator
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Any
 from error import InvalidConstructionInfo
 from settings import *
 
 
-class Illuminator(ActiveParticle, Lightable):
+class Illuminator(Lightable, ActiveParticle):
     """ Active particles that are able to illuminate nearby tiles """
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
@@ -91,7 +91,8 @@ class Puppet(Illuminator):
         self.update_map_position()
 
 
-class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized):
+class StandardMoveSet(CombatStats, Manaized, DisplacableParticle,
+                      ActiveParticle):
     """ Standard movesets that covers basic moving, offensive and defensive
     movements, must be inherited by other sub-creature classes in order to
     utilize these methods.
@@ -100,7 +101,7 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
     - attack_range: The range of basic attacks
     - attack_speed: The number of basic attacks can be performed in a second
     - target: Description of the target of the attacks
-    - attack_texture: The texture of attacks
+    - action_animation: The animation of actions
     - animations: Animations for actions
     - speed: Speed of the particle
 
@@ -109,12 +110,12 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
     """
     attack_range: int
     attack_speed: float
-    attack_texture: dict[str, pygame.Surface]
+    action_animation: dict[str, List[str]]
     target: MultiObjectsEvaluator
     animations: dict[str, Puppet]
     speed: float
 
-    def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
+    def __init__(self, info: dict[str, Any]) -> None:
         attr = ['attack_speed', 'attack_range', 'target', 'speed']
         default = {
             'attack_speed': DEFAULT_ATTACK_SPEED,
@@ -130,8 +131,8 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
         super().__init__(info)
 
         optional = {
-            'basic_attack_texture': BASIC_ATTACK_TEXTURE,
-            'guard_texture': BASIC_ATTACK_TEXTURE
+            'basic_action_animation': BASIC_ATTACK_TEXTURE,
+            'guard_texture': GUARD_TEXTURE
         }
         for op in optional:
             if op not in info:
@@ -146,7 +147,7 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
             'mana_cost': DEFAULT_ATTACK_MANA_COST,
             'cooldown': 0,
             'priority': ATTACK_PRIORITY,
-            'texture': info['basic_attack_texture'],
+            'texture': info['basic_action_animation'],
             'time': DEFAULT_ACTION_TIMER,
             'method': self.basic_attack
         }
@@ -167,7 +168,7 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
             'priority': DEFENSE_PRIORITY,
             'time': GUARD_DURATION,
             'method': self.guard,
-            'texture': GUARD_TEXTURE,
+            'texture': info['guard_texture'],
             'extendable': True
         }
         speed_up = {
@@ -217,7 +218,7 @@ class StandardMoveSet(DisplacableParticle, ActiveParticle, CombatStats, Manaized
             'solid': False,
             'map_name': self.map_name,
             'sync_offset': (offset, offset),
-            'update_priority': BASIC_ATTACK_TEXTURE_PRIORITY
+            'update_priority': BASIC_ATTACK_ANIMATION_PRIORITY
         }
         collision_box = Puppet(info)
         self.animations["basic_attack"] = collision_box
@@ -365,6 +366,8 @@ class Fireball(StandardMoveSet, Illuminator):
                                 (self.is_target(particle) or particle.solid) \
                                 and self.detect_collision(particle):
                             self.destroyed = True
+                            if isinstance(particle, Fireball):
+                                particle.destroyed = True
                             setattr(self, "v" + direction, 0)
                             return 0, current
         return total, current
@@ -374,7 +377,8 @@ class Fireball(StandardMoveSet, Illuminator):
             SELF_PREFIX: self,
             OTHER_PREFIX: particle
         }
-        return isinstance(particle, Creature) and self.target.eval(contract)
+        return (isinstance(particle, Creature) or
+                isinstance(particle, Fireball)) and self.target.eval(contract)
 
     def action(self, optional=None):
         if not self.destroyed:
@@ -385,14 +389,14 @@ class Fireball(StandardMoveSet, Illuminator):
             self.remove()
 
 
-class ProjectileThrowable(ActiveParticle, CombatStats, Manaized):
+class ProjectileThrowable(CombatStats, Manaized, ActiveParticle):
     """
     """
     target: BoolExpr
     fireball_explosion_range: int
 
-    def __init__(self, info: dict[str, Union[str, float, int, BoolExpr]]) -> \
-            None:
+    def __init__(self, info: dict[str, Union[str, float, int, BoolExpr,
+                                             List[Any]]]) -> None:
         attr = ['target', 'fireball_explosion_range']
         default = {
             'target': MultiObjectsEvaluator(DEFAULT_TARGET),
@@ -451,6 +455,6 @@ class ProjectileThrowable(ActiveParticle, CombatStats, Manaized):
             'vx': self.get_stat("vx"),
             'vy': self.get_stat("vy"),
             'map_name': self.map_name,
-            'basic_attack_texture': 'fireball_explosion.png'
+            'basic_action_animation': 'fireball_explosion.png'
         }
         Fireball(info)

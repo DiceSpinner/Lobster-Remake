@@ -1,11 +1,11 @@
 from __future__ import annotations
 import pygame
 import math
-from typing import List, Tuple, Union, Optional, Any, Set
+from typing import List, Tuple, Union, Set, Any
 from utilities import Positional, Displacable, Collidable, Lightable, Living, \
-    Directional, get_direction, Staminaized
+    Directional, get_direction, Staminaized, Interactive, Animated
 from settings import *
-from error import InvalidConstructionInfo, UnknownTextureError
+from error import UnknownTextureError
 from data_structures import Queue
 
 
@@ -20,8 +20,10 @@ class Particle(Collidable, Directional):
 
     - name: Name of this particle
     - map_display: Display in the map txt file
+    - texture: The texture of this particle
+
     === Private Attributes ===
-    -
+
     """
     # static fields
     ID = 0
@@ -40,7 +42,7 @@ class Particle(Collidable, Directional):
     texture: str
     map_display: str
     name: str
-    occupation: dict[str, Set[Tuple[int, int]]]
+    _occupation: dict[str, Set[Tuple[int, int]]]
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         default = {
@@ -58,7 +60,7 @@ class Particle(Collidable, Directional):
         for item in info:
             if item in attr:
                 setattr(self, item, info[item])
-        self.occupation = {self.map_name: set()}
+        self._occupation = {self.map_name: set()}
         self.update_map_position()
         Particle.particle_group[self.id] = self
         Particle.new_particles[self.id] = self
@@ -84,34 +86,80 @@ class Particle(Collidable, Directional):
 
     def get_texture(self):
         d = math.ceil(self.get_stat("diameter") * Particle.Scale)
-        return get_texture_by_info(self.texture, (d, d), self.direction, 255)
+        return get_texture_by_info(self.get_image(),
+                                   (d, d), self.direction, 255)
+
+    def get_image(self):
+        return self.texture
 
     def remove(self):
         """ Remove this particle from the game """
         Particle.particle_group.pop(self.id, None)
-        for coor in self.occupation[self.map_name]:
-            Particle.game_map[self.map_name][coor[0]][coor[1]].remove(self.id)
+        for cod in self._occupation[self.map_name]:
+            Particle.game_map[self.map_name][cod[0]][cod[1]].remove(self.id)
 
     def update_map_position(self):
         """ Update the position of the particle on the game map """
-        occupied = self.occupation.copy()
+        occupied = self._occupation.copy()
         new_pos = calculate_colliding_tiles(round(self.x, 0), round(self.y, 0),
                                             self.get_stat('diameter'))
         for mp in occupied:
             for point in occupied[mp].copy():
                 if not mp == self.map_name or point not in new_pos:
-                    self.occupation[mp].remove(point)
+                    self._occupation[mp].remove(point)
                     Particle.game_map[mp][point[0]][point[1]].remove(self.id)
                 else:
                     new_pos.remove(point)
         for point in new_pos:
-            if self.map_name not in self.occupation:
-                self.occupation[self.map_name] = set()
-            self.occupation[self.map_name].add(point)
+            if self.map_name not in self._occupation:
+                self._occupation[self.map_name] = set()
+            self._occupation[self.map_name].add(point)
             Particle.game_map[self.map_name][point[0]][point[1]].add(self.id)
+
+    def get_tiles_in_contact(self) -> List[Block]:
+        for t in self._occupation[self.map_name]:
+            tile = Particle.tile_map[self.map_name][t[0]][t[1]]
+            yield Particle.particle_group[tile]
 
     def __str__(self):
         return self.name
+
+
+class AnimatedParticle(Animated, Particle):
+    """ Animated particles
+
+    === Public Attributes ===
+    - animation: A list of images represents the animation for this particle
+
+    === Private Attributes ===
+    - _display_counter: Counter for the animation display of the particle
+    """
+    animation: List[str]
+    _display_counter: int
+
+    def __init__(self, info: dict[str, Any]) -> None:
+        default = {
+            'animation': [DEFAULT_PARTICLE_TEXTURE]
+        }
+        attr = ['animation']
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+        for item in info:
+            if item in attr:
+                setattr(self, item, info[item])
+        super().__init__(info)
+        assert len(self.animation) > 0
+        self._display_counter = 0
+
+    def update_status(self):
+        self._display_counter += 1
+        if self._display_counter >= len(self.animation):
+            self._display_counter = 0
+        super().update_status()
+
+    def get_image(self):
+        return self.animation[self._display_counter]
 
 
 class DisplacableParticle(Displacable, Particle):
@@ -231,13 +279,34 @@ class Block(Lightable, Particle):
 class ActiveParticle(Staminaized, Particle):
     """
     Description: Particles that can act on its own
+
+    === Public Attributes ===
+    - interact_range: The range this particle can interact with other
+        interactive particles
+
+    === Private Attributes ===
+    - _interactive_particles: A set of particles that this particle can
+        interact with, this field must be updated every frame
     """
     ap_group = {}
+    _interactive_particles: Set[Interactive]
+    interact_range: int
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
-        if "display_priority" not in info:
-            info['display_priority'] = 2
+        default = {
+            'display_priority': 2,
+            'interact_range': INTERACT_RANGE,
+        }
+        attr = ['interact_range']
+        Particle.ID += 1
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
         super().__init__(info)
+        for item in info:
+            if item in attr:
+                setattr(self, item, info[item])
+        self._interactive_particles = set()
         ActiveParticle.ap_group[self.id] = self
 
     def action(self) -> None:
@@ -246,21 +315,28 @@ class ActiveParticle(Staminaized, Particle):
         """
         raise NotImplementedError
 
-    def get_tiles_in_contact(self) -> List[Block]:
-        for t in self.occupation[self.map_name]:
-            tile = Particle.game_map[self.map_name][t[0]][t[1]]
-            for ps in tile:
-                if ps in Block.block_group:
-                    yield Block.block_group[ps]
+    def update_status(self) -> None:
+        # Ignore warning, get_particle_in_radius guarantees to return Particles
+        self._interactive_particles = set()
+        radius = math.ceil(self.interact_range // TILE_SIZE)
+        for particle in get_particles_in_radius(self, radius, Interactive,
+                                                False):
+            center_x = particle.x + particle.diameter / 2
+            center_y = particle.y + particle.diameter / 2
+            x_d = pow(center_x - self.x, 2)
+            y_d = pow(center_y - self.y, 2)
+            if math.sqrt(x_d + y_d) <= pow(self.interact_range, 2):
+                self._interactive_particles.add(particle)
+        super().update_status()
 
     def remove(self):
         Particle.remove(self)
         ActiveParticle.ap_group.pop(self.id, None)
 
 
-class Creature(ActiveParticle, Living):
+class Creature(Living, Particle):
     """
-    Description: Active particles that are considered alive
+    Description: Particles that are alive
 
     Additional Attributes:
         light_on: Whether this creature is illuminating its surroundings
@@ -294,11 +370,12 @@ class Creature(ActiveParticle, Living):
 
     def get_texture(self):
         d = math.ceil(self.get_stat("diameter") * Particle.Scale)
-        tup = (self.texture, (d, d), self.direction, 255, self.color)
+        texture = self.get_image()
+        tup = (texture, (d, d), self.direction, 255, self.color)
         try:
             return Creature.creature_textures[tup].copy()
         except KeyError:
-            raw = get_texture_by_info(self.texture, (d * 2, d * 2),
+            raw = get_texture_by_info(texture, (d * 2, d * 2),
                                       self.direction, 255)
             self._draw_color_on_texture(raw)
             Creature.creature_textures[tup] = raw
@@ -313,17 +390,11 @@ class Creature(ActiveParticle, Living):
             pygame.draw.circle(
                 surface, self.color, (cx, cy), radius)
 
-    def action(self) -> None:
-        """ AI of this creature, this method should
-        be called on every active creature regularly
-        """
-        raise NotImplementedError
-
     def die(self):
         self.remove()
 
     def remove(self):
-        ActiveParticle.remove(self)
+        Particle.remove(self)
         Creature.creature_group.pop(self.id, None)
 
 
@@ -363,8 +434,8 @@ def get_particles_by_tiles(map_name: str,
     return ps
 
 
-def get_particles_in_radius(particle: Particle, radius=1, tp=None, corner=True) -> \
-        List[Particle]:
+def get_particles_in_radius(particle: Particle, radius=1, tp=None, corner=True)\
+        -> List[Particle]:
     """ Return particles in the given radius through Generator """
     row = int(particle.y // TILE_SIZE)
     col = int(particle.x // TILE_SIZE)

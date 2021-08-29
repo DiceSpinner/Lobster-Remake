@@ -1,4 +1,4 @@
-from typing import Union, List, Tuple, Any
+from typing import Union, List, Tuple, Any, Callable
 from error import UnknownTypeError
 from expression_trees import ObjectAttributeEvaluator
 import math
@@ -66,8 +66,26 @@ class PredefinedParticle:
                     self.info[attr] = math.floor(evaluate(value))
                 elif data_type == 'const_ceil':
                     self.info[attr] = math.ceil(evaluate(value))
+                elif data_type == 'List_str':
+                    self.info[attr] = to_list(value, str)
                 else:
                     raise UnknownTypeError
+
+
+def to_list(value: str, data_type: Callable) -> List[Any]:
+    """ Convert 'value' to list of specified objects
+
+    >>> s = '[1, 2, 3, 4]'
+    >>> to_list(s, int)
+    [1, 2, 3, 4]
+    >>> to_list(s, str)
+    ['1', '2', '3', '4']
+    """
+    value = value[1:-1].split(', ')  # remove brackets
+    lst = []
+    for item in value:
+        lst.append(data_type(item))
+    return lst
 
 
 def evaluate(item: str) -> Any:
