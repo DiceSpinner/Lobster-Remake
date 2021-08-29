@@ -318,7 +318,7 @@ class ActiveParticle(Staminaized, Particle):
     def update_status(self) -> None:
         # Ignore warning, get_particle_in_radius guarantees to return Particles
         self._interactive_particles = set()
-        radius = math.ceil(self.interact_range // TILE_SIZE)
+        radius = math.ceil(self.interact_range / TILE_SIZE)
         for particle in get_particles_in_radius(self, radius, Interactive,
                                                 False):
             center_x = particle.x + particle.diameter / 2

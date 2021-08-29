@@ -314,9 +314,6 @@ class Interactive(BufferedStats):
     interact_condition: Union[ObjectAttributeEvaluator, MultiObjectsEvaluator]
 
     def __init__(self, info: dict[str, Union[int, str]]) -> None:
-        attr = ['interact_radius']
-        for a in attr:
-            setattr(self, a, info[a])
         super().__init__(info)
 
     def upon_interact(self, other: Any) -> None:

@@ -3,6 +3,7 @@ import pygame
 from effect import *
 from particles import *
 from Creatures import NPC, Player
+from Blocks import *
 from utilities import Positional, Staminaized, BufferedStats, UpdateReq
 from expression_trees import MultiObjectsEvaluator
 from predefined_particle import PredefinedParticle

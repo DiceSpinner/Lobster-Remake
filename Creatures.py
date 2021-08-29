@@ -71,6 +71,11 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator,
             self.enqueue_action('guard', {})
         if pressed_keys[pygame.K_SPACE]:
             self.enqueue_action('fireball', {})
+        # interact
+        for particle in self._interactive_particles:
+            if pressed_keys[pygame.K_f]:
+                particle.upon_interact(self)
+            break
 
     def remove(self):
         Creature.remove(self)
