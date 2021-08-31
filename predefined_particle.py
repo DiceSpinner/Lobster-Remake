@@ -48,7 +48,10 @@ class PredefinedParticle:
                 elif data_type == 'float':
                     self.info[attr] = float(value)
                 elif data_type == 'bool':
-                    self.info[attr] = bool(value)
+                    if value == 'True':
+                        self.info[attr] = True
+                    else:
+                        self.info[attr] = False
                 elif data_type == 'str':
                     self.info[attr] = value
                 elif data_type == 'eval':

@@ -4,7 +4,7 @@ from effect import *
 from particles import *
 from Creatures import NPC, Player
 from Blocks import *
-from utilities import Positional, Staminaized, BufferedStats, UpdateReq
+from utilities import Positional, Staminaized, UpdateReq
 from expression_trees import MultiObjectsEvaluator
 from predefined_particle import PredefinedParticle
 from settings import *
@@ -297,7 +297,6 @@ class Level:
             self._load_maps()
             self._load_texts()
             self._initialized = True
-            self.running = True
             self.difficulty = difficulty
             player_key = list(Player.player_group)[0]
             player = Player.player_group[player_key]
@@ -459,11 +458,11 @@ class Game:
     def run(self) -> None:
         print(Player.__mro__)
         clock = pygame.time.Clock()
-        running = True
         pygame.mouse.set_visible(False)
         cursor_image = pygame.image.load(os.path.join("assets", "images",
                                                       "cursor.png"))
         cursor_image = pygame.transform.scale(cursor_image, (24, 24))
+        pygame.event.set_blocked(None)
         pygame.event.set_allowed([pygame.QUIT, pygame.KEYUP, pygame.KEYDOWN])
         public_namespace.input_handler = InputProcessor()
         while public_namespace.input_handler.running:
