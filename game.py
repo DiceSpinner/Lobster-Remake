@@ -10,7 +10,9 @@ from predefined_particle import PredefinedParticle
 from settings import *
 from data_structures import PriorityQueue
 from error import CollidedParticleNameError
+from input_processor import InputProcessor
 import os
+import public_namespace
 
 
 class GameMap:
@@ -241,7 +243,6 @@ class Level:
     _map_names: List[str]
     _particle_names: List[str]
     _initialized: bool
-    running: bool
     fonts: dict[str, pygame.font.Font]
     texts: dict[str, pygame.Surface]
 
@@ -259,7 +260,6 @@ class Level:
         self._game_maps = {}
         self.fonts = {}
         self.texts = {}
-        self.running = False
 
     def _load_maps(self) -> None:
         # load in predefined particles
@@ -306,6 +306,7 @@ class Level:
             self._camera = Camera(player,
                                   screen.get_height(), screen.get_width(),
                                   self._game_maps)
+
         player_key = list(Player.player_group)[0]
         player = Player.player_group[player_key]
         # mouse tracking
@@ -316,15 +317,12 @@ class Level:
         player.aim(pos)
 
         # player input and other game actions
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self.running = False
-        pressed_keys = pygame.key.get_pressed()
-        if pressed_keys[pygame.K_UP]:
+        pressed_keys = public_namespace.input_handler.get_key_pressed()
+        if pygame.KEYUP in pressed_keys:
             Particle.Scale += 0.01
             if Particle.Scale > MAX_CAMERA_SCALE:
                 Particle.Scale = MAX_CAMERA_SCALE
-        if pressed_keys[pygame.K_DOWN]:
+        if pygame.KEYDOWN in pressed_keys:
             Particle.Scale -= 0.01
             if Particle.Scale < MIN_CAMERA_SCALE:
                 Particle.Scale = MIN_CAMERA_SCALE
@@ -335,7 +333,9 @@ class Level:
         # particle status update
         tiles = []
         updates = PriorityQueue(lower_update_priority)
+        particles = []
         for particle in active_particles:
+            particles.append(particle)
             if isinstance(particle, ActiveParticle):
                 # queue up actions
                 particle.action()
@@ -362,11 +362,10 @@ class Level:
         self._camera.sync()
         self._camera.display(screen)
         self.player_info_display(player, screen)
+
         # reset buffer
-        for particle in Particle.particle_group:
-            particle = Particle.particle_group[particle]
-            if isinstance(particle, BufferedStats):
-                particle.reset()
+        for particle in particles:
+            particle.reset()
 
     def player_info_display(self, player: Player, screen: pygame.Surface):
         health_bar_width = 300
@@ -465,9 +464,12 @@ class Game:
         cursor_image = pygame.image.load(os.path.join("assets", "images",
                                                       "cursor.png"))
         cursor_image = pygame.transform.scale(cursor_image, (24, 24))
-        while running:
+        pygame.event.set_allowed([pygame.QUIT, pygame.KEYUP, pygame.KEYDOWN])
+        public_namespace.input_handler = InputProcessor()
+        while public_namespace.input_handler.running:
             clock.tick(self.frame_rate)
             self._screen.fill((0, 0, 0))
+            public_namespace.input_handler.process_input(pygame.event.get())
             if self._level_selecting:
                 self._selected_level = 0
                 self._level_selecting = False
@@ -475,8 +477,6 @@ class Game:
             elif self._level_running:
                 level = self._levels[self._selected_level]
                 level.run(self._screen)
-                if not level.running:
-                    running = False
             self._screen.blit(cursor_image, pygame.mouse.get_pos())
             # FPS
             font = pygame.font.Font(None, 25)

@@ -1,6 +1,7 @@
 from particle_actions import StandardMoveSet, ProjectileThrowable, Illuminator
 from particles import Creature, AnimatedParticle
 from typing import List, Tuple, Union, Optional
+import public_namespace
 import pygame
 
 
@@ -28,18 +29,20 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator,
 
     def action(self) -> None:
         self.mouse_buttons = pygame.mouse.get_pressed(3)
-        pressed_keys = pygame.key.get_pressed()
+        pressed_keys = public_namespace.input_handler.get_key_pressed()
+        key_up = public_namespace.input_handler.get_key_up()
+
         effective_directions = []
-        if pressed_keys[pygame.K_w] and not pressed_keys[pygame.K_s]:
+        if pygame.K_w in pressed_keys and pygame.K_s not in pressed_keys:
             effective_directions.append(pygame.K_w)
-        elif not pressed_keys[pygame.K_w] and pressed_keys[pygame.K_s]:
+        elif pygame.K_w not in pressed_keys and pygame.K_s in pressed_keys:
             effective_directions.append(pygame.K_s)
 
-        if pressed_keys[pygame.K_d] and not pressed_keys[pygame.K_a]:
+        if pygame.K_d in pressed_keys and pygame.K_a not in pressed_keys:
             effective_directions.append(pygame.K_d)
-        elif not pressed_keys[pygame.K_d] and pressed_keys[pygame.K_a]:
+        elif pygame.K_d not in pressed_keys and pygame.K_a in pressed_keys:
             effective_directions.append(pygame.K_a)
-        if pressed_keys[pygame.K_LSHIFT]:
+        if pygame.K_LSHIFT in pressed_keys:
             self.enqueue_action("speed_up", {})
         if len(effective_directions) > 0:
             if pygame.K_w in effective_directions:
@@ -69,11 +72,11 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator,
             self.enqueue_action('basic_attack', {})
         elif self.mouse_buttons[2] == 1:
             self.enqueue_action('guard', {})
-        if pressed_keys[pygame.K_SPACE]:
+        if pygame.K_SPACE in pressed_keys:
             self.enqueue_action('fireball', {})
         # interact
         for particle in self._interactive_particles:
-            if pressed_keys[pygame.K_f]:
+            if pygame.K_f in key_up:
                 particle.upon_interact(self)
             break
 

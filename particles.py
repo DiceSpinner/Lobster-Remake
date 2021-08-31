@@ -86,11 +86,8 @@ class Particle(Collidable, Directional):
 
     def get_texture(self):
         d = math.ceil(self.get_stat("diameter") * Particle.Scale)
-        return get_texture_by_info(self.get_image(),
+        return get_texture_by_info(self.texture,
                                    (d, d), self.direction, 255)
-
-    def get_image(self):
-        return self.texture
 
     def remove(self):
         """ Remove this particle from the game """
@@ -156,10 +153,8 @@ class AnimatedParticle(Animated, Particle):
         self._display_counter += 1
         if self._display_counter >= len(self.animation):
             self._display_counter = 0
+        self.texture = self.animation[self._display_counter]
         super().update_status()
-
-    def get_image(self):
-        return self.animation[self._display_counter]
 
 
 class DisplacableParticle(Displacable, Particle):
@@ -370,7 +365,7 @@ class Creature(Living, Particle):
 
     def get_texture(self):
         d = math.ceil(self.get_stat("diameter") * Particle.Scale)
-        texture = self.get_image()
+        texture = self.texture
         tup = (texture, (d, d), self.direction, 255, self.color)
         try:
             return Creature.creature_textures[tup].copy()
@@ -437,8 +432,10 @@ def get_particles_by_tiles(map_name: str,
 def get_particles_in_radius(particle: Particle, radius=1, tp=None, corner=True)\
         -> List[Particle]:
     """ Return particles in the given radius through Generator """
-    row = int(particle.y // TILE_SIZE)
-    col = int(particle.x // TILE_SIZE)
+    x = particle.x + particle.diameter / 2
+    y = particle.y + particle.diameter / 2
+    row = int(y // TILE_SIZE)
+    col = int(x // TILE_SIZE)
     start_row = row - radius
     end_row = row + radius
     start_col = col - radius
