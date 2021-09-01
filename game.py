@@ -308,8 +308,9 @@ class Level:
 
         player_key = list(Player.player_group)[0]
         player = Player.player_group[player_key]
+
         # mouse tracking
-        mouse_pos = pygame.mouse.get_pos()
+        mouse_pos = public_namespace.input_handler.get_mouse_pos()
         pos = Positional()
         pos.x = mouse_pos[0] / Particle.Scale + self._camera.x
         pos.y = mouse_pos[1] / Particle.Scale + self._camera.y
@@ -317,11 +318,11 @@ class Level:
 
         # player input and other game actions
         pressed_keys = public_namespace.input_handler.get_key_pressed()
-        if pygame.KEYUP in pressed_keys:
+        if pygame.K_UP in pressed_keys:
             Particle.Scale += 0.01
             if Particle.Scale > MAX_CAMERA_SCALE:
                 Particle.Scale = MAX_CAMERA_SCALE
-        if pygame.KEYDOWN in pressed_keys:
+        if pygame.K_DOWN in pressed_keys:
             Particle.Scale -= 0.01
             if Particle.Scale < MIN_CAMERA_SCALE:
                 Particle.Scale = MIN_CAMERA_SCALE
@@ -463,12 +464,14 @@ class Game:
                                                       "cursor.png"))
         cursor_image = pygame.transform.scale(cursor_image, (24, 24))
         pygame.event.set_blocked(None)
-        pygame.event.set_allowed([pygame.QUIT, pygame.KEYUP, pygame.KEYDOWN])
+        pygame.event.set_allowed([pygame.QUIT, pygame.KEYUP, pygame.KEYDOWN,
+                                  pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP])
         public_namespace.input_handler = InputProcessor()
         while public_namespace.input_handler.running:
             clock.tick(self.frame_rate)
             self._screen.fill((0, 0, 0))
-            public_namespace.input_handler.process_input(pygame.event.get())
+            public_namespace.input_handler.process_input(pygame.event.get(),
+                                                         pygame.mouse.get_pos())
             if self._level_selecting:
                 self._selected_level = 0
                 self._level_selecting = False

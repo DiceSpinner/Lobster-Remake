@@ -102,9 +102,8 @@ class Animated(UpdateReq):
         for key in default:
             if key not in info:
                 info[key] = default[key]
-        for item in info:
-            if item in attr:
-                setattr(self, item, info[item])
+        for item in attr:
+            setattr(self, item, info[item])
         super().__init__(info)
         assert len(self.animation) > 0
         self._display_counter = 0
@@ -127,9 +126,8 @@ class Positional(BufferedStats):
         for item in attr:
             if item not in info:
                 info[item] = 0
-        for item in info:
-            if item in attr:
-                setattr(self, item, info[item])
+        for item in attr:
+            setattr(self, item, info[item])
         super().__init__(info)
 
 
@@ -191,9 +189,8 @@ class Directional(Positional):
             if key not in info:
                 info[key] = default[key]
 
-        for item in info:
-            if item in attr:
-                setattr(self, item, info[item])
+        for item in attr:
+            setattr(self, item, info[item])
 
     def aim(self, obj: Positional) -> None:
         """ Change the direction pointing to the obj """
@@ -307,20 +304,13 @@ class Collidable(Positional, BufferedStats):
 
 class Interactive(BufferedStats):
     """ Description: Interactive units
-
-    === Public Attributes ===
-    - interact_condition: Decides who can interact with this object
     """
-    interact_condition: Union[ObjectAttributeEvaluator, MultiObjectsEvaluator]
-
-    def __init__(self, info: dict[str, Union[int, str]]) -> None:
-        super().__init__(info)
 
     def upon_interact(self, other: Any) -> None:
         raise NotImplementedError
 
     def can_interact(self, other: Any) -> bool:
-        """ Returns True iff 'other' can interact with this object """
+        """ Returns True if 'other' can interact with this object """
         raise NotImplementedError
 
 

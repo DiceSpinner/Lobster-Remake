@@ -5,3 +5,5 @@ solid~bool~True
 shape~str~square
 light_resistance~int~256
 texture~str~door_1_close-brown.jpg
+opened_texture~str~door_1_open.png
+closed_texture~str~door_1_close-brown.jpg

@@ -11,12 +11,18 @@ class Door(Block, Interactive):
     """
     opened: bool
     opened_texture: str
+    closed_texture: str
 
-    def __init__(self, info: dict[str, Union[str, float, int, bool]]) -> None:
-        if 'opened' not in info:
-            self.opened = False
-        else:
-            self.opened = info['opened']
+    def __init__(self, info: dict[str, Any]) -> None:
+        default = {
+            'opened': False
+        }
+        attr = ['opened', 'opened_texture', 'closed_texture']
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+        for item in attr:
+            setattr(self, item, info[item])
         super().__init__(info)
 
     def upon_interact(self, other: Any) -> None:
@@ -24,12 +30,12 @@ class Door(Block, Interactive):
             self.opened = False
             self.solid = True
             self.light_resistance = 256
-            self.texture = 'door_1_close-brown.jpg'
+            self.texture = self.closed_texture
         else:
             self.opened = True
             self.solid = False
             self.light_resistance = 0
-            self.texture = 'door_1_open.png'
+            self.texture = self.opened_texture
 
     def can_interact(self, other: Any) -> bool:
         return True

@@ -49,6 +49,7 @@ class Particle(Collidable, Directional):
             'display_priority': DEFAULT_DISPLAY_PRIORITY,
             'texture': DEFAULT_PARTICLE_TEXTURE,
             'name': Particle.ID + 1,
+            'map_display': DEFAULT_PARTICLE_DISPLAY
         }
         attr = ['display_priority', 'texture', 'name', 'map_display']
         super().__init__(info)
@@ -57,9 +58,8 @@ class Particle(Collidable, Directional):
         for key in default:
             if key not in info:
                 info[key] = default[key]
-        for item in info:
-            if item in attr:
-                setattr(self, item, info[item])
+        for item in attr:
+            setattr(self, item, info[item])
         self._occupation = {self.map_name: set()}
         self.update_map_position()
         Particle.particle_group[self.id] = self
@@ -142,9 +142,8 @@ class AnimatedParticle(Animated, Particle):
         for key in default:
             if key not in info:
                 info[key] = default[key]
-        for item in info:
-            if item in attr:
-                setattr(self, item, info[item])
+        for item in attr:
+            setattr(self, item, info[item])
         super().__init__(info)
         assert len(self.animation) > 0
         self._display_counter = 0
@@ -298,9 +297,8 @@ class ActiveParticle(Staminaized, Particle):
             if key not in info:
                 info[key] = default[key]
         super().__init__(info)
-        for item in info:
-            if item in attr:
-                setattr(self, item, info[item])
+        for item in attr:
+            setattr(self, item, info[item])
         self._interactive_particles = set()
         ActiveParticle.ap_group[self.id] = self
 
@@ -359,9 +357,8 @@ class Creature(Living, Particle):
         for key in default:
             if key not in info:
                 info[key] = default[key]
-        for item in info:
-            if item in attr:
-                setattr(self, item, info[item])
+        for item in attr:
+            setattr(self, item, info[item])
 
     def get_texture(self):
         d = math.ceil(self.get_stat("diameter") * Particle.Scale)

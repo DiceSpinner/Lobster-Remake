@@ -18,20 +18,20 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator,
 
     """
     player_group = {}
-    mouse_buttons: Tuple[int, int, int]
     light_on: bool
 
     def __init__(self, info: dict[str, Union[str, float, int]]) -> None:
         super().__init__(info)
         Player.player_group[self.id] = self
-        self.mouse_buttons = (0, 0, 0)
         self.light_on = True
 
     def action(self) -> None:
-        self.mouse_buttons = pygame.mouse.get_pressed(3)
         pressed_keys = public_namespace.input_handler.get_key_pressed()
         key_up = public_namespace.input_handler.get_key_up()
+        mouse_button_clicked = public_namespace.input_handler.\
+            get_mouse_button_clicked()
 
+        # move
         effective_directions = []
         if pygame.K_w in pressed_keys and pygame.K_s not in pressed_keys:
             effective_directions.append(pygame.K_w)
@@ -68,12 +68,13 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator,
         if self.light_on:
             self.enqueue_action('illuminate', {})
         # attack
-        if self.mouse_buttons[0] == 1:
+        if pygame.BUTTON_LEFT in mouse_button_clicked:
             self.enqueue_action('basic_attack', {})
-        elif self.mouse_buttons[2] == 1:
+        elif pygame.BUTTON_RIGHT in mouse_button_clicked:
             self.enqueue_action('guard', {})
         if pygame.K_SPACE in pressed_keys:
             self.enqueue_action('fireball', {})
+
         # interact
         for particle in self._interactive_particles:
             if pygame.K_f in key_up:

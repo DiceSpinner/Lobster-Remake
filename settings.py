@@ -29,7 +29,7 @@ INTERACT_RANGE = int(TILE_SIZE // 2)
 # particle attributes
 DEFAULT_DISPLAY_PRIORITY = 0
 DEFAULT_PARTICLE_TEXTURE = "Lobster_64.png"
-DEFAULT_PARTICLE_NAME = "particle"  # used while not reading data from map files
+DEFAULT_PARTICLE_DISPLAY = "particle"  # used while not reading data from map
 
 #
 DEFAULT_SPEED = 250
