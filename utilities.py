@@ -9,11 +9,11 @@ import math
 
 def compare_by_execution_priority(i1: Tuple[Staminaized, dict[str, Any], str],
                                   i2: Tuple[Staminaized, dict[str, Any], str]) \
-        -> bool:
+        -> int:
     """ Sort by non-decreasing order """
     a1 = i1[0].actions[i1[2]]
     a2 = i2[0].actions[i2[2]]
-    return a1.action_priority > a2.action_priority
+    return a1.action_priority - a2.action_priority
 
 
 class BufferedStats:

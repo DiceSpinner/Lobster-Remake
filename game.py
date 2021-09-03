@@ -492,23 +492,23 @@ class Game:
         pygame.quit()
 
 
-def higher_id(p1: Particle, p2: Particle) -> bool:
-    return p1.id > p2.id
+def higher_id(p1: Particle, p2: Particle) -> int:
+    return p1.id - p2.id
 
 
-def lower_display_priority(p1: Particle, p2: Particle) -> bool:
-    return p1.display_priority < p2.display_priority
+def lower_display_priority(p1: Particle, p2: Particle) -> int:
+    return p2.display_priority - p1.display_priority
 
 
-def lower_update_priority(p1: UpdateReq, p2: UpdateReq) -> bool:
-    return p1.update_priority < p2.update_priority
+def lower_update_priority(p1: UpdateReq, p2: UpdateReq) -> int:
+    return p2.update_priority - p1.update_priority
 
 
-def lower_priority_over_id(p1: Particle, p2: Particle) -> bool:
+def lower_priority_over_id(p1: Particle, p2: Particle) -> int:
     """ Sort by non-decreasing order """
     if p1.display_priority == p2.display_priority:
-        return p1.id > p2.id
-    return p1.display_priority < p2.display_priority
+        return p2.id - p1.id
+    return p2.display_priority - p1.display_priority
 
 
 def _load_assets():

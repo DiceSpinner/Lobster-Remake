@@ -83,7 +83,7 @@ FIREBALL_EXPLOSION_RANGE = TILE_SIZE // 2
 FIREBALL_TEXTURE = 'fireball.png'
 FIREBALL_BRIGHTNESS = 256
 
-# Action priorities
+# Action priorities, higher priority actions will be executed first
 BUFF_PRIORITY = 4
 ATTACK_PRIORITY = 2
 MOVE_PRIORITY = 3
