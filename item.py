@@ -19,9 +19,10 @@ class Item:
     description: str
     max_stack: int
     stack: int
+    texture: str
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
-        attr = ['name', 'description', 'max_stack', 'stack']
+        attr = ['name', 'description', 'max_stack', 'stack', 'texture']
         default = {}
         for key in default:
             if key not in info:

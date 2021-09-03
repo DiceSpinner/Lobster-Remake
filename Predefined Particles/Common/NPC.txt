@@ -1,5 +1,5 @@
-N
 NPC
+map_display~str~N
 diameter~const_int~TILE_SIZE - 36
 shape~str~circle
 attack_range~const_int~TILE_SIZE / 1.5

@@ -1,5 +1,5 @@
-PY
 Player
+map_display~str~PY
 diameter~int~41
 shape~str~circle
 solid~bool~True

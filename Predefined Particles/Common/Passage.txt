@@ -1,5 +1,5 @@
-P
 Block
+map_display~str~P
 diameter~const_int~TILE_SIZE
 shape~str~square
 light_resistance~int~50

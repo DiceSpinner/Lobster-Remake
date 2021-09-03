@@ -15,7 +15,7 @@ class Door(Block, Interactive):
 
     def __init__(self, info: dict[str, Any]) -> None:
         default = {
-            'opened': False
+            'opened': True
         }
         attr = ['opened', 'opened_texture', 'closed_texture']
         for key in default:
@@ -24,15 +24,21 @@ class Door(Block, Interactive):
         for item in attr:
             setattr(self, item, info[item])
         super().__init__(info)
+        self.update()
 
     def upon_interact(self, other: Any) -> None:
         if self.opened:
             self.opened = False
+        else:
+            self.opened = True
+        self.update()
+
+    def update(self):
+        if not self.opened:
             self.solid = True
             self.light_resistance = 256
             self.texture = self.closed_texture
         else:
-            self.opened = True
             self.solid = False
             self.light_resistance = 0
             self.texture = self.opened_texture

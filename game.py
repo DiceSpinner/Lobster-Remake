@@ -6,7 +6,7 @@ from Creatures import NPC, Player
 from Blocks import *
 from utilities import Positional, Staminaized, UpdateReq
 from expression_trees import MultiObjectsEvaluator
-from predefined_particle import PredefinedParticle
+from ifstream_object_constructor import IfstreamObjectConstructor
 from settings import *
 from data_structures import PriorityQueue
 from error import CollidedParticleNameError
@@ -36,7 +36,7 @@ class GameMap:
     tiles: List[List[int]]
 
     def __init__(self, location: str,
-                 look_up: dict[str, PredefinedParticle]) -> None:
+                 look_up: dict[str, IfstreamObjectConstructor]) -> None:
         self.tile_size = TILE_SIZE
         with open(location, 'r') as file:
             lines = file.readlines()
@@ -61,11 +61,13 @@ class GameMap:
                     col = row[j].split('_')
                     for particle in col:
                         pre_p = look_up[particle]
-                        pre_p.info['x'] = pos_x
-                        pre_p.info['y'] = pos_y
-                        pre_p.info['map_name'] = self.name
-                        particle_class = globals()[pre_p.info['class']]
-                        particle = particle_class(pre_p.info.copy())
+                        ext = {
+                            'x': pos_x,
+                            'y': pos_y,
+                            'map_name': self.name
+                        }
+                        particle = pre_p.construct(ext, ['particles',
+                                                         'Creatures', 'Blocks'])
                         if isinstance(particle, Block):
                             self.tiles[i][j] = particle.id
 
@@ -268,9 +270,10 @@ class Level:
             path = os.path.join("Predefined Particles", name)
             particles = os.listdir(path)
             for particle in particles:
-                pre_p = PredefinedParticle(os.path.join(path, particle))
-                if pre_p.info['map_display'] not in look_up:
-                    look_up[pre_p.info['map_display']] = pre_p
+                pre_p = IfstreamObjectConstructor(os.path.join(path, particle))
+                map_display = pre_p.get_attribute('map_display')
+                if map_display not in look_up:
+                    look_up[map_display] = pre_p
                 else:
                     raise CollidedParticleNameError
 
