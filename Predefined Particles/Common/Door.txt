@@ -1,0 +1,8 @@
+Door
+map_display~str~D
+diameter~const_int~TILE_SIZE
+solid~bool~True
+shape~str~square
+light_resistance~int~256
+opened_texture~str~door_1_open.png
+closed_texture~str~door_1_close-brown.jpg

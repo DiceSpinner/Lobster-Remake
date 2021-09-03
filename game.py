@@ -3,13 +3,16 @@ import pygame
 from effect import *
 from particles import *
 from Creatures import NPC, Player
-from utilities import Positional, Staminaized, BufferedStats, UpdateReq
+from Blocks import *
+from utilities import Positional, Staminaized, UpdateReq
 from expression_trees import MultiObjectsEvaluator
-from predefined_particle import PredefinedParticle
+from ifstream_object_constructor import IfstreamObjectConstructor
 from settings import *
 from data_structures import PriorityQueue
 from error import CollidedParticleNameError
+from input_processor import InputProcessor
 import os
+import public_namespace
 
 
 class GameMap:
@@ -33,7 +36,7 @@ class GameMap:
     tiles: List[List[int]]
 
     def __init__(self, location: str,
-                 look_up: dict[str, PredefinedParticle]) -> None:
+                 look_up: dict[str, IfstreamObjectConstructor]) -> None:
         self.tile_size = TILE_SIZE
         with open(location, 'r') as file:
             lines = file.readlines()
@@ -58,11 +61,13 @@ class GameMap:
                     col = row[j].split('_')
                     for particle in col:
                         pre_p = look_up[particle]
-                        pre_p.info['x'] = pos_x
-                        pre_p.info['y'] = pos_y
-                        pre_p.info['map_name'] = self.name
-                        particle_class = globals()[pre_p.info['class']]
-                        particle = particle_class(pre_p.info.copy())
+                        ext = {
+                            'x': pos_x,
+                            'y': pos_y,
+                            'map_name': self.name
+                        }
+                        particle = pre_p.construct(ext, ['particles',
+                                                         'Creatures', 'Blocks'])
                         if isinstance(particle, Block):
                             self.tiles[i][j] = particle.id
 
@@ -240,7 +245,6 @@ class Level:
     _map_names: List[str]
     _particle_names: List[str]
     _initialized: bool
-    running: bool
     fonts: dict[str, pygame.font.Font]
     texts: dict[str, pygame.Surface]
 
@@ -258,7 +262,6 @@ class Level:
         self._game_maps = {}
         self.fonts = {}
         self.texts = {}
-        self.running = False
 
     def _load_maps(self) -> None:
         # load in predefined particles
@@ -267,9 +270,10 @@ class Level:
             path = os.path.join("Predefined Particles", name)
             particles = os.listdir(path)
             for particle in particles:
-                pre_p = PredefinedParticle(os.path.join(path, particle))
-                if pre_p.info['map_display'] not in look_up:
-                    look_up[pre_p.info['map_display']] = pre_p
+                pre_p = IfstreamObjectConstructor(os.path.join(path, particle))
+                map_display = pre_p.get_attribute('map_display')
+                if map_display not in look_up:
+                    look_up[map_display] = pre_p
                 else:
                     raise CollidedParticleNameError
 
@@ -296,7 +300,6 @@ class Level:
             self._load_maps()
             self._load_texts()
             self._initialized = True
-            self.running = True
             self.difficulty = difficulty
             player_key = list(Player.player_group)[0]
             player = Player.player_group[player_key]
@@ -305,25 +308,24 @@ class Level:
             self._camera = Camera(player,
                                   screen.get_height(), screen.get_width(),
                                   self._game_maps)
+
         player_key = list(Player.player_group)[0]
         player = Player.player_group[player_key]
+
         # mouse tracking
-        mouse_pos = pygame.mouse.get_pos()
+        mouse_pos = public_namespace.input_handler.get_mouse_pos()
         pos = Positional()
         pos.x = mouse_pos[0] / Particle.Scale + self._camera.x
         pos.y = mouse_pos[1] / Particle.Scale + self._camera.y
         player.aim(pos)
 
         # player input and other game actions
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self.running = False
-        pressed_keys = pygame.key.get_pressed()
-        if pressed_keys[pygame.K_UP]:
+        pressed_keys = public_namespace.input_handler.get_key_pressed()
+        if pygame.K_UP in pressed_keys:
             Particle.Scale += 0.01
             if Particle.Scale > MAX_CAMERA_SCALE:
                 Particle.Scale = MAX_CAMERA_SCALE
-        if pressed_keys[pygame.K_DOWN]:
+        if pygame.K_DOWN in pressed_keys:
             Particle.Scale -= 0.01
             if Particle.Scale < MIN_CAMERA_SCALE:
                 Particle.Scale = MIN_CAMERA_SCALE
@@ -334,7 +336,9 @@ class Level:
         # particle status update
         tiles = []
         updates = PriorityQueue(lower_update_priority)
+        particles = []
         for particle in active_particles:
+            particles.append(particle)
             if isinstance(particle, ActiveParticle):
                 # queue up actions
                 particle.action()
@@ -361,11 +365,10 @@ class Level:
         self._camera.sync()
         self._camera.display(screen)
         self.player_info_display(player, screen)
+
         # reset buffer
-        for particle in Particle.particle_group:
-            particle = Particle.particle_group[particle]
-            if isinstance(particle, BufferedStats):
-                particle.reset()
+        for particle in particles:
+            particle.reset()
 
     def player_info_display(self, player: Player, screen: pygame.Surface):
         health_bar_width = 300
@@ -457,15 +460,21 @@ class Game:
                 self._levels.append(Level(level_file.readlines()))
 
     def run(self) -> None:
+        print(Player.__mro__)
         clock = pygame.time.Clock()
-        running = True
         pygame.mouse.set_visible(False)
         cursor_image = pygame.image.load(os.path.join("assets", "images",
                                                       "cursor.png"))
         cursor_image = pygame.transform.scale(cursor_image, (24, 24))
-        while running:
+        pygame.event.set_blocked(None)
+        pygame.event.set_allowed([pygame.QUIT, pygame.KEYUP, pygame.KEYDOWN,
+                                  pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP])
+        public_namespace.input_handler = InputProcessor()
+        while public_namespace.input_handler.running:
             clock.tick(self.frame_rate)
             self._screen.fill((0, 0, 0))
+            public_namespace.input_handler.process_input(pygame.event.get(),
+                                                         pygame.mouse.get_pos())
             if self._level_selecting:
                 self._selected_level = 0
                 self._level_selecting = False
@@ -473,8 +482,6 @@ class Game:
             elif self._level_running:
                 level = self._levels[self._selected_level]
                 level.run(self._screen)
-                if not level.running:
-                    running = False
             self._screen.blit(cursor_image, pygame.mouse.get_pos())
             # FPS
             font = pygame.font.Font(None, 25)
@@ -485,23 +492,23 @@ class Game:
         pygame.quit()
 
 
-def higher_id(p1: Particle, p2: Particle) -> bool:
-    return p1.id > p2.id
+def higher_id(p1: Particle, p2: Particle) -> int:
+    return p1.id - p2.id
 
 
-def lower_display_priority(p1: Particle, p2: Particle) -> bool:
-    return p1.display_priority < p2.display_priority
+def lower_display_priority(p1: Particle, p2: Particle) -> int:
+    return p2.display_priority - p1.display_priority
 
 
-def lower_update_priority(p1: UpdateReq, p2: UpdateReq) -> bool:
-    return p1.update_priority < p2.update_priority
+def lower_update_priority(p1: UpdateReq, p2: UpdateReq) -> int:
+    return p2.update_priority - p1.update_priority
 
 
-def lower_priority_over_id(p1: Particle, p2: Particle) -> bool:
+def lower_priority_over_id(p1: Particle, p2: Particle) -> int:
     """ Sort by non-decreasing order """
     if p1.display_priority == p2.display_priority:
-        return p1.id > p2.id
-    return p1.display_priority < p2.display_priority
+        return p2.id - p1.id
+    return p2.display_priority - p1.display_priority
 
 
 def _load_assets():

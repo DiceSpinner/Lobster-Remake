@@ -24,12 +24,12 @@ MAX_CAMERA_SCALE = 1.5
 MIN_CAMERA_SCALE = 1
 
 #
-INTERACT_RADIUS = int(TILE_SIZE // 2)
+INTERACT_RANGE = int(TILE_SIZE // 2)
 
 # particle attributes
 DEFAULT_DISPLAY_PRIORITY = 0
 DEFAULT_PARTICLE_TEXTURE = "Lobster_64.png"
-DEFAULT_PARTICLE_NAME = "particle"  # used while not reading data from map files
+DEFAULT_PARTICLE_DISPLAY = "particle"  # used while not reading data from map
 
 #
 DEFAULT_SPEED = 250
@@ -61,7 +61,7 @@ DEFAULT_ATTACK_MANA_COST = 0
 DEFAULT_TARGET = "( not ( " + OTHER_PREFIX + "_id = " + SELF_PREFIX + "_id ) )"
 BASIC_ATTACK_TEXTURE = 'attack_circle.png'
 BASIC_ATTACK_BRIGHTNESS = 256
-BASIC_ATTACK_TEXTURE_PRIORITY = 1
+BASIC_ATTACK_ANIMATION_PRIORITY = 1
 
 # SpellCastable interface
 DEFAULT_ABILITY_POWER = 30
@@ -83,7 +83,7 @@ FIREBALL_EXPLOSION_RANGE = TILE_SIZE // 2
 FIREBALL_TEXTURE = 'fireball.png'
 FIREBALL_BRIGHTNESS = 256
 
-# Action priorities
+# Action priorities, higher priority actions will be executed first
 BUFF_PRIORITY = 4
 ATTACK_PRIORITY = 2
 MOVE_PRIORITY = 3

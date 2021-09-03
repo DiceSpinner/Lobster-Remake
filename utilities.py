@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Union, List, Optional, Any, Tuple, Callable
 from error import UnknownShapeError, InvalidAttrTypeError
-from expression_trees import ObjectAttributeEvaluator
+from expression_trees import ObjectAttributeEvaluator, MultiObjectsEvaluator
 from settings import *
 from data_structures import WeightedPriorityQueue
 import math
@@ -9,28 +9,11 @@ import math
 
 def compare_by_execution_priority(i1: Tuple[Staminaized, dict[str, Any], str],
                                   i2: Tuple[Staminaized, dict[str, Any], str]) \
-        -> bool:
+        -> int:
     """ Sort by non-decreasing order """
     a1 = i1[0].actions[i1[2]]
     a2 = i2[0].actions[i2[2]]
-    return a1.action_priority > a2.action_priority
-
-
-class UpdateReq:
-    """ Units that requires updates every frame should implement this interface
-
-    === Public Attributes ===
-    - update_priority: The update priority of this unit
-    """
-
-    def __init__(self, info: dict[str, Any]) -> None:
-        if 'update_priority' not in info:
-            info['update_priority'] = 0
-        self.update_priority = info['update_priority']
-        super().__init__(info)
-
-    def update_status(self):
-        raise NotImplementedError
+    return a1.action_priority - a2.action_priority
 
 
 class BufferedStats:
@@ -83,6 +66,49 @@ class BufferedStats:
         self._buffer_stats = {}
 
 
+class UpdateReq(BufferedStats):
+    """ Units that requires updates every frame should implement this interface
+    === Public Attributes ===
+    - update_priority: The update priority of this unit
+    """
+
+    def __init__(self, info: dict[str, Any]) -> None:
+        if 'update_priority' not in info:
+            info['update_priority'] = 0
+        self.update_priority = info['update_priority']
+        super().__init__(info)
+
+    def update_status(self):
+        raise NotImplementedError
+
+
+class Animated(UpdateReq):
+    """ Animated units
+
+    === Public Attributes ===
+    - animation: A list of images represents the animation for this unit
+
+    === Private Attributes ===
+    - _display_counter: Counter for the animation display of the unit
+    """
+    animation: List[str]
+    _display_counter: int
+
+    def __init__(self, info: dict[str, Any]) -> None:
+        default = {
+            'animation': [DEFAULT_PARTICLE_TEXTURE]
+        }
+        attr = ['animation']
+        for key in default:
+            if key not in info:
+                info[key] = default[key]
+        for item in attr:
+            setattr(self, item, info[item])
+        super().__init__(info)
+        assert len(self.animation) > 0
+        self._display_counter = 0
+
+
 class Positional(BufferedStats):
     """ An interface that provides positional attributes
 
@@ -100,9 +126,8 @@ class Positional(BufferedStats):
         for item in attr:
             if item not in info:
                 info[item] = 0
-        for item in info:
-            if item in attr:
-                setattr(self, item, info[item])
+        for item in attr:
+            setattr(self, item, info[item])
         super().__init__(info)
 
 
@@ -164,9 +189,8 @@ class Directional(Positional):
             if key not in info:
                 info[key] = default[key]
 
-        for item in info:
-            if item in attr:
-                setattr(self, item, info[item])
+        for item in attr:
+            setattr(self, item, info[item])
 
     def aim(self, obj: Positional) -> None:
         """ Change the direction pointing to the obj """
@@ -280,31 +304,13 @@ class Collidable(Positional, BufferedStats):
 
 class Interactive(BufferedStats):
     """ Description: Interactive units
-
-    === Public Attributes ===
-    - interact_radius: The radius which this unit can be interacted with
-
-    Representation Invariants:
-        0<= light_source <= 255
-        0<= brightness <= 255
     """
-    interact_radius: int
-    condition: ObjectAttributeEvaluator
 
-    def __init__(self, info: dict[str, Union[int, str]]) -> None:
-        attr = ['interact_radius', 'condition']
-        default = {
-            'interact_radius': INTERACT_RADIUS,
-            'condition': ObjectAttributeEvaluator("")
-        }
-        for key in default:
-            if key not in info:
-                info[key] = default[key]
-        for a in attr:
-            setattr(self, a, info[a])
-        super().__init__(info)
+    def upon_interact(self, other: Any) -> None:
+        raise NotImplementedError
 
-    def interact(self, other: Interactive):
+    def can_interact(self, other: Any) -> bool:
+        """ Returns True if 'other' can interact with this object """
         raise NotImplementedError
 
 
@@ -340,7 +346,7 @@ class Lightable(BufferedStats):
         super().__init__(info)
 
 
-class Regenable(UpdateReq, BufferedStats):
+class Regenable(UpdateReq):
     """ Description: Interface that provides access to resource regeneration
 
     === Public Attributes ===
@@ -470,7 +476,7 @@ class Action:
     - cooldown: Cooldown of this action
     - time: The amount of frames this action is going to last
     - action_priority: The execution priority of this action
-    - action_texture: Names of assets of Visual Displays of this action
+    - action_animation: Names of assets of Visual Displays of this action
     - extendable: Whether this action can be extended for a longer duration
     - repeated_resource_consumption: (Only when extendable), determines whether
         this actions consumes resource on each extended call
@@ -481,7 +487,7 @@ class Action:
     cooldown: float
     action_time: int
     action_priority: int
-    action_texture: str
+    action_animation: str
     _cooldown_counter: int
     method: Callable
     extendable: bool
