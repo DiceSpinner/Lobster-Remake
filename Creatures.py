@@ -1,12 +1,12 @@
 from particle_actions import StandardMoveSet, ProjectileThrowable, Illuminator
-from particles import Creature, AnimatedParticle
+from particles import Creature, AnimatedParticle, Storage
 from typing import List, Tuple, Union, Optional
 import public_namespace
 import pygame
 
 
 class Player(StandardMoveSet, ProjectileThrowable, Illuminator,
-             AnimatedParticle, Creature):
+             AnimatedParticle, Creature, Storage):
     """
     Description: Player class
 

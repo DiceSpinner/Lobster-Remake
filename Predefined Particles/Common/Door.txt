@@ -1,4 +1,4 @@
-Door
+Blocks.Door
 map_display~str~D
 diameter~const_int~TILE_SIZE
 solid~bool~True

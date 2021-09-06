@@ -1,9 +1,10 @@
 from __future__ import annotations
 from typing import Union, List, Optional, Any, Tuple, Callable
 from error import UnknownShapeError, InvalidAttrTypeError
-from expression_trees import ObjectAttributeEvaluator, MultiObjectsEvaluator
+from expression_trees import ObjectAttributeEvaluator
 from settings import *
 from data_structures import WeightedPriorityQueue
+from item import Item, Inventory
 import math
 
 
@@ -302,7 +303,7 @@ class Collidable(Positional, BufferedStats):
         return other._square_circle(self)
 
 
-class Interactive(BufferedStats):
+class Interactive:
     """ Description: Interactive units
     """
 

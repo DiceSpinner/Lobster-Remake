@@ -1,5 +1,8 @@
 from __future__ import annotations
-from typing import Union, List
+from typing import Union, List, Tuple
+from settings import *
+import pygame
+import public_namespace
 
 
 class Item:
@@ -7,6 +10,7 @@ class Item:
 
     === Public Attributes ===
     - name: Name of this item
+    - image: The image of this item
     - description: Description of this item
     - max_stack: The maximum amount of stacks this item can have
     - stack: The current stack of this item
@@ -22,7 +26,7 @@ class Item:
     texture: str
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
-        attr = ['name', 'description', 'max_stack', 'stack', 'texture']
+        attr = ['name', 'description', 'max_stack', 'stack', 'texture', 'image']
         default = {}
         for key in default:
             if key not in info:
@@ -47,6 +51,11 @@ class Item:
         else:
             other.stack = 0
 
+    def display(self, screen: pygame.Surface,
+                location: Tuple[int, int]) -> None:
+        screen.blit(public_namespace.get_texture_by_info(
+            self.texture, (ITEM_IMAGE_SIZE, ITEM_IMAGE_SIZE), 0, 0), location)
+
 
 class Inventory:
     """ Inventory used to store items
@@ -59,21 +68,21 @@ class Inventory:
     - size >= 0
     """
     size: int
-    items: List[Item]
+    _items: List[Item]
 
-    def __init__(self, size: int) -> None:
-        self.size = size
-        self.items = []
+    def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
+        self.size = info['size']
+        self._items = []
 
     def add(self, item: Item) -> None:
         """ Add items to this inventory """
         same_items = []
-        for i in self.items:
+        for i in self._items:
             if i == item:
                 same_items.append(i)
         for i in same_items:
             i.merge(item)
             if item.stack == 0:
                 return
-        if len(self.items) < self.size:
-            self.items.append(item)
+        if len(self._items) < self.size:
+            self._items.append(item)

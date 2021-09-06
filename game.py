@@ -10,7 +10,6 @@ from ifstream_object_constructor import IfstreamObjectConstructor
 from settings import *
 from data_structures import PriorityQueue
 from error import CollidedParticleNameError
-from input_processor import InputProcessor
 import os
 import public_namespace
 
@@ -50,8 +49,8 @@ class GameMap:
                             for i in range(self.height)]
             self.tiles = [[-1 for j in range(self.width)]
                           for i in range(self.height)]
-            Particle.game_map[self.name] = self.content
-            Particle.tile_map[self.name] = self.tiles
+            public_namespace.game_map[self.name] = self.content
+            public_namespace.tile_map[self.name] = self.tiles
             for i in range(len(rows)):
                 pos_y = i * TILE_SIZE
                 row = rows[i].rstrip()
@@ -66,8 +65,7 @@ class GameMap:
                             'y': pos_y,
                             'map_name': self.name
                         }
-                        particle = pre_p.construct(ext, ['particles',
-                                                         'Creatures', 'Blocks'])
+                        particle = pre_p.construct(ext)
                         if isinstance(particle, Block):
                             self.tiles[i][j] = particle.id
 
@@ -125,13 +123,15 @@ class Camera(Positional):
         """
         self.map_name = self.particle.map_name
         radius = self.particle.diameter / 2
-        self.x = self.particle.x + radius - self.width / 2 / Particle.Scale
-        self.y = self.particle.y + radius - self.height / 2 / Particle.Scale
+        self.x = self.particle.x + radius - self.width / 2 / \
+            public_namespace.Scale
+        self.y = self.particle.y + radius - self.height / 2 / \
+            public_namespace.Scale
         current_map = self.game_maps[self.map_name]
-        self.max_x = current_map.width * TILE_SIZE - math.ceil(self.width /
-                                                               Particle.Scale)
-        self.max_y = current_map.height * TILE_SIZE - math.ceil(self.height /
-                                                                Particle.Scale)
+        self.max_x = current_map.width * TILE_SIZE - math.ceil(
+            self.width / public_namespace.Scale)
+        self.max_y = current_map.height * TILE_SIZE - math.ceil(
+            self.height / public_namespace.Scale)
         if self.x > self.max_x:
             self.x = self.max_x
         elif self.x < self.min_x:
@@ -144,17 +144,17 @@ class Camera(Positional):
     def get_displaying_particles(self) -> Tuple[Set[Tuple[int, float, float]],
                                                 Set[Tuple[
                                                     Tuple[float, float], int]]]:
-        size = math.ceil(TILE_SIZE * Particle.Scale)
+        size = math.ceil(TILE_SIZE * public_namespace.Scale)
         current_map = self.game_maps[self.map_name]
         displaying = set()
         start_row = int(self.y // TILE_SIZE)
         first_tile_pixel_y = math.ceil((self.y - start_row * TILE_SIZE) *
-                                       Particle.Scale)
+                                       public_namespace.Scale)
         offset_y = size - first_tile_pixel_y
         end_row = start_row + math.ceil((self.height - offset_y) / size)
         start_col = int(self.x // TILE_SIZE)
         first_tile_pixel_x = math.ceil((self.x - start_col * TILE_SIZE) *
-                                       Particle.Scale)
+                                       public_namespace.Scale)
         offset_x = size - first_tile_pixel_x
         end_col = start_col + math.ceil((self.width - offset_x) / size)
         shades = set()
@@ -185,8 +185,10 @@ class Camera(Positional):
                     else:
                         bx = j * TILE_SIZE
                         by = i * TILE_SIZE
-                        display_x = block_x + (item.x - bx) * Particle.Scale
-                        display_y = block_y + (item.y - by) * Particle.Scale
+                        display_x = block_x + (
+                                item.x - bx) * public_namespace.Scale
+                        display_y = block_y + (
+                                item.y - by) * public_namespace.Scale
                         flag = False
                         tiles = item.get_tiles_in_contact()
                         for t in tiles:
@@ -315,20 +317,20 @@ class Level:
         # mouse tracking
         mouse_pos = public_namespace.input_handler.get_mouse_pos()
         pos = Positional()
-        pos.x = mouse_pos[0] / Particle.Scale + self._camera.x
-        pos.y = mouse_pos[1] / Particle.Scale + self._camera.y
+        pos.x = mouse_pos[0] / public_namespace.Scale + self._camera.x
+        pos.y = mouse_pos[1] / public_namespace.Scale + self._camera.y
         player.aim(pos)
 
         # player input and other game actions
         pressed_keys = public_namespace.input_handler.get_key_pressed()
         if pygame.K_UP in pressed_keys:
-            Particle.Scale += 0.01
-            if Particle.Scale > MAX_CAMERA_SCALE:
-                Particle.Scale = MAX_CAMERA_SCALE
+            public_namespace.Scale += 0.01
+            if public_namespace.Scale > MAX_CAMERA_SCALE:
+                public_namespace.Scale = MAX_CAMERA_SCALE
         if pygame.K_DOWN in pressed_keys:
-            Particle.Scale -= 0.01
-            if Particle.Scale < MIN_CAMERA_SCALE:
-                Particle.Scale = MIN_CAMERA_SCALE
+            public_namespace.Scale -= 0.01
+            if public_namespace.Scale < MIN_CAMERA_SCALE:
+                public_namespace.Scale = MIN_CAMERA_SCALE
         active_map = self._game_maps[player.map_name]
         active_particles = get_particles_in_radius(player,
                                                    PARTICLE_UPDATE_RADIUS, None,
@@ -352,6 +354,8 @@ class Level:
             particle, args, name = Staminaized.action_queue.dequeue()
             particle.execute_action(name, args)
         Staminaized.action_queue.reset()
+
+        # update particle status
         while not updates.is_empty():
             updates.dequeue().update_status()
         active_map.update_contents()
@@ -469,7 +473,6 @@ class Game:
         pygame.event.set_blocked(None)
         pygame.event.set_allowed([pygame.QUIT, pygame.KEYUP, pygame.KEYDOWN,
                                   pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP])
-        public_namespace.input_handler = InputProcessor()
         while public_namespace.input_handler.running:
             clock.tick(self.frame_rate)
             self._screen.fill((0, 0, 0))
@@ -518,29 +521,29 @@ def _load_assets():
     for p in paths:
         pic = pygame.image.load(
             os.path.join(path, p)).convert_alpha()
-        Particle.raw_textures[p] = pic
-        # Loaded textures are being accessed by 4 parameters
+        public_namespace.images[p] = pic
+        # Loaded images are being accessed by 4 parameters
         # in the order of name -> size -> direction -> alpha value
         tup = (p, pic.get_size(), 0, 0)
-        Particle.textures[tup] = pic
+        public_namespace.par_images[tup] = pic
     path = "assets/sounds"
     paths = os.listdir(path)
     for p in paths:
-        Particle.sounds[p] = pygame.mixer.Sound(os.path.join(path, p))
+        public_namespace.sounds[p] = pygame.mixer.Sound(os.path.join(path, p))
 
 
 def get_shade(alpha: int) -> pygame.Surface:
     """ Return the shade with the given alpha value """
     try:
-        return Camera.shades[Particle.Scale][alpha].copy()
+        return Camera.shades[public_namespace.Scale][alpha].copy()
     except KeyError:
-        size = math.ceil(Particle.Scale * TILE_SIZE)
+        size = math.ceil(public_namespace.Scale * TILE_SIZE)
         surface = pygame.Surface((size, size))
         surface.fill((0, 0, 0))
         surface.set_alpha(alpha)
         try:
-            Camera.shades[Particle.Scale][alpha] = surface
+            Camera.shades[public_namespace.Scale][alpha] = surface
         except KeyError:
-            Camera.shades[Particle.Scale] = {}
-            Camera.shades[Particle.Scale][alpha] = surface
+            Camera.shades[public_namespace.Scale] = {}
+            Camera.shades[public_namespace.Scale][alpha] = surface
         return surface.copy()

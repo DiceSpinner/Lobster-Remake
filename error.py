@@ -24,15 +24,6 @@ class EffectSubjectError(Exception):
         return 'The particle being applied by this effect must be its subject.'
 
 
-class UnknownTypeError(Exception):
-    """Exception raised when receiving unexpected input data type.
-    """
-
-    def __str__(self) -> str:
-        """ Return a string representation of this error. """
-        return 'Unknown datatype.'
-
-
 class UnknownShapeError(Exception):
     """Exception raised when receiving unexpected shape of the object.
     """

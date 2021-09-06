@@ -1,12 +1,13 @@
 from __future__ import annotations
 import pygame
 import math
+import public_namespace
 from typing import List, Tuple, Union, Set, Any
 from utilities import Positional, Displacable, Collidable, Lightable, Living, \
     Directional, get_direction, Staminaized, Interactive, Animated
 from settings import *
-from error import UnknownTextureError
 from data_structures import Queue
+from item import *
 
 
 class Particle(Collidable, Directional):
@@ -30,12 +31,7 @@ class Particle(Collidable, Directional):
     particle_group = {}
     new_particles = {}
     light_particles = {}
-    raw_textures = {}
     textures = {}
-    sounds = {}
-    game_map = {}  # dict[str, List[List[List[int]]]]
-    tile_map = {}
-    Scale = 1
 
     id: int
     display_priority: int
@@ -75,7 +71,7 @@ class Particle(Collidable, Directional):
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
-        radius = self.diameter / 2 * Particle.Scale
+        radius = self.diameter / 2 * public_namespace.Scale
         texture = self.get_texture()
         centre_x = location[0] + radius - 1
         centre_y = location[1] + radius - 1
@@ -85,37 +81,40 @@ class Particle(Collidable, Directional):
         screen.blit(texture, [cx, cy])
 
     def get_texture(self):
-        d = math.ceil(self.get_stat("diameter") * Particle.Scale)
-        return get_texture_by_info(self.texture,
-                                   (d, d), self.direction, 255)
+        d = math.ceil(self.get_stat("diameter") * public_namespace.Scale)
+        return public_namespace.get_texture_by_info(self.texture, (d, d),
+                                                    self.direction, 255)
 
     def remove(self):
         """ Remove this particle from the game """
         Particle.particle_group.pop(self.id, None)
         for cod in self._occupation[self.map_name]:
-            Particle.game_map[self.map_name][cod[0]][cod[1]].remove(self.id)
+            public_namespace.game_map[self.map_name][cod[0]][cod[1]].remove(
+                self.id)
 
     def update_map_position(self):
         """ Update the position of the particle on the game map """
         occupied = self._occupation.copy()
-        new_pos = calculate_colliding_tiles(round(self.x, 0), round(self.y, 0),
+        new_pos = calculate_colliding_tiles(int(self.x), int(self.y),
                                             self.get_stat('diameter'))
         for mp in occupied:
             for point in occupied[mp].copy():
                 if not mp == self.map_name or point not in new_pos:
                     self._occupation[mp].remove(point)
-                    Particle.game_map[mp][point[0]][point[1]].remove(self.id)
+                    public_namespace.game_map[mp][point[0]][point[1]].remove(
+                        self.id)
                 else:
                     new_pos.remove(point)
         for point in new_pos:
             if self.map_name not in self._occupation:
                 self._occupation[self.map_name] = set()
             self._occupation[self.map_name].add(point)
-            Particle.game_map[self.map_name][point[0]][point[1]].add(self.id)
+            public_namespace.game_map[self.map_name][point[0]][point[1]].add(
+                self.id)
 
     def get_tiles_in_contact(self) -> List[Block]:
         for t in self._occupation[self.map_name]:
-            tile = Particle.tile_map[self.map_name][t[0]][t[1]]
+            tile = public_namespace.tile_map[self.map_name][t[0]][t[1]]
             yield Particle.particle_group[tile]
 
     def __str__(self):
@@ -227,6 +226,17 @@ class DisplacableParticle(Displacable, Particle):
                 y_d, c_y = self.direction_increment(y_time, "y",
                                                     y_d, c_y)
         super().update_status()
+
+
+class Storage(Particle):
+    """ Particles with inventory
+
+    """
+    inventory: Inventory
+
+    def __init__(self, info: dict[str, Any]) -> None:
+        self.inventory = info['inventory']
+        super().__init__(info)
 
 
 class Block(Lightable, Particle):
@@ -361,21 +371,21 @@ class Creature(Living, Particle):
             setattr(self, item, info[item])
 
     def get_texture(self):
-        d = math.ceil(self.get_stat("diameter") * Particle.Scale)
+        d = math.ceil(self.get_stat("diameter") * public_namespace.Scale)
         texture = self.texture
         tup = (texture, (d, d), self.direction, 255, self.color)
         try:
             return Creature.creature_textures[tup].copy()
         except KeyError:
-            raw = get_texture_by_info(texture, (d * 2, d * 2),
-                                      self.direction, 255)
+            raw = public_namespace.get_texture_by_info(texture, (d * 2, d * 2),
+                                                       self.direction, 255)
             self._draw_color_on_texture(raw)
             Creature.creature_textures[tup] = raw
             return raw.copy()
 
     def _draw_color_on_texture(self, surface: pygame.Surface) -> None:
         if self.color is not None:
-            radius = self.diameter // 2 * Particle.Scale
+            radius = self.diameter // 2 * public_namespace.Scale
             size = surface.get_size()
             cx = int(size[0] / 2)
             cy = int(size[1] / 2)
@@ -405,7 +415,7 @@ def calculate_colliding_tiles(x: float, y: float, diameter: int,
 
 
 def colliding_tiles_generator(x: float, y: float,
-                              diameter: int,) -> List[Tuple[int, int]]:
+                              diameter: int, ) -> List[Tuple[int, int]]:
     """ Generate the coordinates of the colliding tiles with the given info """
     start_col = int(x // TILE_SIZE)
     start_row = int(y // TILE_SIZE)
@@ -419,15 +429,15 @@ def colliding_tiles_generator(x: float, y: float,
 def get_particles_by_tiles(map_name: str,
                            coordinates: List[Tuple[int, int]]) -> Set[int]:
     """ Return particle ids inside tiles given by the coordinates """
-    mp = Particle.game_map[map_name]
+    mp = public_namespace.game_map[map_name]
     ps = set()
     for coord in coordinates:
         ps.update(mp[coord[0]][coord[1]].copy())
     return ps
 
 
-def get_particles_in_radius(particle: Particle, radius=1, tp=None, corner=True)\
-        -> List[Particle]:
+def get_particles_in_radius(particle: Particle, radius=1, tp=None,
+                            corner=True) -> List[Particle]:
     """ Return particles in the given radius through Generator """
     x = particle.x + particle.diameter / 2
     y = particle.y + particle.diameter / 2
@@ -438,8 +448,8 @@ def get_particles_in_radius(particle: Particle, radius=1, tp=None, corner=True)\
     start_col = col - radius
     end_col = col + radius
 
-    width = len(Particle.game_map[particle.map_name])
-    height = len(Particle.game_map[particle.map_name][0])
+    width = len(public_namespace.game_map[particle.map_name])
+    height = len(public_namespace.game_map[particle.map_name][0])
     if start_row < 0:
         start_row = 0
     if end_row >= height:
@@ -455,10 +465,10 @@ def get_particles_in_radius(particle: Particle, radius=1, tp=None, corner=True)\
             if not corner and abs(y - col) > (radius - dif):
                 continue
             if tp == Block:
-                yield Block.block_group[Particle.tile_map[particle.map_name][x][
+                yield Block.block_group[public_namespace.tile_map[particle.map_name][x][
                     y]]
             else:
-                ps = Particle.game_map[particle.map_name][x][y]
+                ps = public_namespace.game_map[particle.map_name][x][y]
                 for p in ps.copy():
                     item = Particle.particle_group[p]
                     if item.id not in yielded:
@@ -475,24 +485,3 @@ def get_nearby_particles(particle: Particle) -> Set[int]:
     tiles = colliding_tiles_generator(particle.x, particle.y, particle.diameter)
     r.update(get_particles_by_tiles(particle.map_name, tiles))
     return r
-
-
-def get_texture_by_info(name: str, size: Tuple[int, int], direction: float,
-                        alpha: int) \
-        -> pygame.Surface:
-    """ Return the texture with the given info, if texture with the given
-    configuration does not exist but is loaded into Particle.raw_textures,
-    generate the texture with this configuration and return it.
-    """
-    if name in Particle.raw_textures:
-        tup = (name, size, direction, alpha)
-        try:
-            return Particle.textures[tup].copy()
-        except KeyError:
-            raw_texture = Particle.raw_textures[name]
-            scaled = pygame.transform.scale(raw_texture, size)
-            rotated = pygame.transform.rotate(scaled, direction)
-            rotated.set_alpha(alpha)
-            Particle.textures[tup] = rotated
-            return rotated.copy()
-    raise UnknownTextureError
