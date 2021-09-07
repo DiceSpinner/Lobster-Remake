@@ -9,7 +9,7 @@ from expression_trees import MultiObjectsEvaluator
 from ifstream_object_constructor import IfstreamObjectConstructor
 from settings import *
 from data_structures import PriorityQueue
-from error import CollidedParticleNameError
+from input_processor import InputProcessor
 import os
 import public_namespace
 
@@ -124,14 +124,14 @@ class Camera(Positional):
         self.map_name = self.particle.map_name
         radius = self.particle.diameter / 2
         self.x = self.particle.x + radius - self.width / 2 / \
-            public_namespace.Scale
+            public_namespace.scale
         self.y = self.particle.y + radius - self.height / 2 / \
-            public_namespace.Scale
+            public_namespace.scale
         current_map = self.game_maps[self.map_name]
         self.max_x = current_map.width * TILE_SIZE - math.ceil(
-            self.width / public_namespace.Scale)
+            self.width / public_namespace.scale)
         self.max_y = current_map.height * TILE_SIZE - math.ceil(
-            self.height / public_namespace.Scale)
+            self.height / public_namespace.scale)
         if self.x > self.max_x:
             self.x = self.max_x
         elif self.x < self.min_x:
@@ -144,17 +144,17 @@ class Camera(Positional):
     def get_displaying_particles(self) -> Tuple[Set[Tuple[int, float, float]],
                                                 Set[Tuple[
                                                     Tuple[float, float], int]]]:
-        size = math.ceil(TILE_SIZE * public_namespace.Scale)
+        size = math.ceil(TILE_SIZE * public_namespace.scale)
         current_map = self.game_maps[self.map_name]
         displaying = set()
         start_row = int(self.y // TILE_SIZE)
         first_tile_pixel_y = math.ceil((self.y - start_row * TILE_SIZE) *
-                                       public_namespace.Scale)
+                                       public_namespace.scale)
         offset_y = size - first_tile_pixel_y
         end_row = start_row + math.ceil((self.height - offset_y) / size)
         start_col = int(self.x // TILE_SIZE)
         first_tile_pixel_x = math.ceil((self.x - start_col * TILE_SIZE) *
-                                       public_namespace.Scale)
+                                       public_namespace.scale)
         offset_x = size - first_tile_pixel_x
         end_col = start_col + math.ceil((self.width - offset_x) / size)
         shades = set()
@@ -186,9 +186,9 @@ class Camera(Positional):
                         bx = j * TILE_SIZE
                         by = i * TILE_SIZE
                         display_x = block_x + (
-                                item.x - bx) * public_namespace.Scale
+                                item.x - bx) * public_namespace.scale
                         display_y = block_y + (
-                                item.y - by) * public_namespace.Scale
+                                item.y - by) * public_namespace.scale
                         flag = False
                         tiles = item.get_tiles_in_contact()
                         for t in tiles:
@@ -246,6 +246,8 @@ class Level:
     _camera: Camera
     _map_names: List[str]
     _particle_names: List[str]
+    _item_names: List[str]
+    _items: List[str]
     _initialized: bool
     fonts: dict[str, pygame.font.Font]
     texts: dict[str, pygame.Surface]
@@ -253,20 +255,31 @@ class Level:
     def __init__(self, asset: List[str]) -> None:
         self._map_names = []
         self._particle_names = []
+        self._item_names = []
         for line in asset:
             line = line.rstrip().split('=')
             if line[0] == 'maps':
                 self._map_names = line[1].split(':')
-            elif line[0] == 'pre_particles':
+            elif line[0] == 'predefined_particles':
                 self._particle_names.append(line[1])
+            elif line[0] == 'predefined_items':
+                self._item_names.append(line[1])
         self.difficulty = 0  # default difficulty
         self._initialized = False
         self._game_maps = {}
         self.fonts = {}
         self.texts = {}
 
+    def _load_items(self) -> None:
+        """ Load predefined items to the public namespace """
+        for name in self._item_names:
+            path = os.path.join("Predefined Items", name)
+            items = os.listdir(path)
+            for item in items:
+                IfstreamObjectConstructor(os.path.join(path, item))
+
     def _load_maps(self) -> None:
-        # load in predefined particles
+        # load in predefined particles and construct game maps with them
         look_up = {}
         for name in self._particle_names:
             path = os.path.join("Predefined Particles", name)
@@ -274,10 +287,7 @@ class Level:
             for particle in particles:
                 pre_p = IfstreamObjectConstructor(os.path.join(path, particle))
                 map_display = pre_p.get_attribute('map_display')
-                if map_display not in look_up:
-                    look_up[map_display] = pre_p
-                else:
-                    raise CollidedParticleNameError
+                look_up[map_display] = pre_p
 
         for m in self._map_names:
             name = os.path.join("assets/maps", m + ".txt")
@@ -299,6 +309,7 @@ class Level:
         """
         if not self._initialized:
             _load_assets()
+            self._load_items()
             self._load_maps()
             self._load_texts()
             self._initialized = True
@@ -317,20 +328,20 @@ class Level:
         # mouse tracking
         mouse_pos = public_namespace.input_handler.get_mouse_pos()
         pos = Positional()
-        pos.x = mouse_pos[0] / public_namespace.Scale + self._camera.x
-        pos.y = mouse_pos[1] / public_namespace.Scale + self._camera.y
+        pos.x = mouse_pos[0] / public_namespace.scale + self._camera.x
+        pos.y = mouse_pos[1] / public_namespace.scale + self._camera.y
         player.aim(pos)
 
         # player input and other game actions
         pressed_keys = public_namespace.input_handler.get_key_pressed()
         if pygame.K_UP in pressed_keys:
-            public_namespace.Scale += 0.01
-            if public_namespace.Scale > MAX_CAMERA_SCALE:
-                public_namespace.Scale = MAX_CAMERA_SCALE
+            public_namespace.scale += 0.01
+            if public_namespace.scale > MAX_CAMERA_SCALE:
+                public_namespace.scale = MAX_CAMERA_SCALE
         if pygame.K_DOWN in pressed_keys:
-            public_namespace.Scale -= 0.01
-            if public_namespace.Scale < MIN_CAMERA_SCALE:
-                public_namespace.Scale = MIN_CAMERA_SCALE
+            public_namespace.scale -= 0.01
+            if public_namespace.scale < MIN_CAMERA_SCALE:
+                public_namespace.scale = MIN_CAMERA_SCALE
         active_map = self._game_maps[player.map_name]
         active_particles = get_particles_in_radius(player,
                                                    PARTICLE_UPDATE_RADIUS, None,
@@ -403,6 +414,23 @@ class Level:
         screen.blit(self.texts['resource_bar'], (80, 140))
         screen.blit(mana_bar, (80, 160))
 
+        keys = public_namespace.input_handler.get_key_pressed()
+        if pygame.K_TAB in keys:
+            item_text = self.fonts['player_info'].render('Items:', True,
+                                                         (255, 255, 0))
+            rect = pygame.Surface((300, 500))
+            rect.fill((0, 0, 0))
+            rect.set_alpha(120)
+            pos_x = 80
+            pos_y = 200
+            rect.blit(item_text, (10, 10))
+            sx, sy = 10, 10 + ITEM_IMAGE_SIZE
+            size = (ITEM_IMAGE_SIZE, ITEM_IMAGE_SIZE)
+            for item in player.inventory.items:
+                item.display(rect, (sx, sy), size, True)
+                sy += ITEM_IMAGE_SIZE + 5
+            screen.blit(rect, (pos_x, pos_y))
+
     def exit(self):
         """
         Release memory of loaded resources and exit the level
@@ -473,6 +501,7 @@ class Game:
         pygame.event.set_blocked(None)
         pygame.event.set_allowed([pygame.QUIT, pygame.KEYUP, pygame.KEYDOWN,
                                   pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP])
+        public_namespace.input_handler = InputProcessor()
         while public_namespace.input_handler.running:
             clock.tick(self.frame_rate)
             self._screen.fill((0, 0, 0))
@@ -535,15 +564,15 @@ def _load_assets():
 def get_shade(alpha: int) -> pygame.Surface:
     """ Return the shade with the given alpha value """
     try:
-        return Camera.shades[public_namespace.Scale][alpha].copy()
+        return Camera.shades[public_namespace.scale][alpha].copy()
     except KeyError:
-        size = math.ceil(public_namespace.Scale * TILE_SIZE)
+        size = math.ceil(public_namespace.scale * TILE_SIZE)
         surface = pygame.Surface((size, size))
         surface.fill((0, 0, 0))
         surface.set_alpha(alpha)
         try:
-            Camera.shades[public_namespace.Scale][alpha] = surface
+            Camera.shades[public_namespace.scale][alpha] = surface
         except KeyError:
-            Camera.shades[public_namespace.Scale] = {}
-            Camera.shades[public_namespace.Scale][alpha] = surface
+            Camera.shades[public_namespace.scale] = {}
+            Camera.shades[public_namespace.scale][alpha] = surface
         return surface.copy()

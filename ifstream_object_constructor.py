@@ -1,26 +1,32 @@
-from typing import List, Any, Callable, TextIO, Tuple
+from typing import List, Any, Callable, TextIO, Tuple, Optional
 from expression_trees import ObjectAttributeEvaluator
+from error import CollidedObjectKeyError
 import math
 import settings
 import importlib
+import public_namespace
 
 
 class _Constructor:
     """  """
     class_name: str
     info: dict[str, Any]
+    key: Optional[str]
 
     def __init__(self, file_time: Tuple[TextIO, int], name: str) -> None:
         self.class_name = name
         self.info = {}
+        self.key = None
         file, num = file_time
         while not num == 0:
             num -= 1
             try:
                 field = next(file).strip().split('~')
-                attr = field[0]
-                data_type = field[1]
-                value = field[2]
+                if len(field) == 2:
+                    assert field[0] == 'key'
+                    self.key = field[1]
+                    continue
+                attr, data_type, value = field
                 if data_type == 'int':
                     self.info[attr] = int(value)
                 elif data_type == 'float':
@@ -47,7 +53,9 @@ class _Constructor:
                     self.info[attr] = math.ceil(evaluate(value))
                 elif data_type == 'List_str':
                     self.info[attr] = to_list(value, str)
-                else:
+                elif data_type == 'predefined':
+                    self.info[attr] = public_namespace.predefined_objects[value]
+                elif data_type == 'extension':
                     n = int(value)
                     name = next(file).strip()
                     self.info[attr] = _Constructor((file, n), name)
@@ -64,7 +72,8 @@ class _Constructor:
         tmp.update(extension)
         for item in tmp:
             attr = tmp[item]
-            if isinstance(attr, _Constructor):
+            if isinstance(attr, _Constructor) or \
+                    isinstance(attr, IfstreamObjectConstructor):
                 tmp[item] = attr.construct({})
         return name(tmp)
 
@@ -92,6 +101,11 @@ class IfstreamObjectConstructor:
             # separate class name and its fields
             class_name = next(file).rstrip()
             self._constructor = _Constructor((file, -1), class_name)
+        key = self._constructor.key
+        if key is not None:
+            if key in public_namespace.predefined_objects:
+                raise CollidedObjectKeyError
+            public_namespace.predefined_objects[key] = self
 
     def get_attribute(self, key: str):
         return self._constructor.info[key]

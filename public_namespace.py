@@ -1,12 +1,11 @@
 """ This module can be accessed from everywhere else. """
 
 import pygame
-from error import UnknownTextureError
 from typing import Tuple
-from input_processor import InputProcessor
+from error import UnknownTextureError
 
 # input handling
-input_handler = InputProcessor()
+input_handler = None
 
 # loaded assets
 images = {}
@@ -16,7 +15,10 @@ sounds = {}
 par_images = {}
 
 # Camera Scaling
-Scale = 1
+scale = 1
+
+# predefined objects
+predefined_objects = {}
 
 # Game map
 game_map = {}  # dict[str, List[List[List[int]]]]

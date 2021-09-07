@@ -71,7 +71,7 @@ class Particle(Collidable, Directional):
 
     def display(self, screen: pygame.Surface,
                 location: Tuple[int, int]) -> None:
-        radius = self.diameter / 2 * public_namespace.Scale
+        radius = self.diameter / 2 * public_namespace.scale
         texture = self.get_texture()
         centre_x = location[0] + radius - 1
         centre_y = location[1] + radius - 1
@@ -81,7 +81,7 @@ class Particle(Collidable, Directional):
         screen.blit(texture, [cx, cy])
 
     def get_texture(self):
-        d = math.ceil(self.get_stat("diameter") * public_namespace.Scale)
+        d = math.ceil(self.get_stat("diameter") * public_namespace.scale)
         return public_namespace.get_texture_by_info(self.texture, (d, d),
                                                     self.direction, 255)
 
@@ -371,7 +371,7 @@ class Creature(Living, Particle):
             setattr(self, item, info[item])
 
     def get_texture(self):
-        d = math.ceil(self.get_stat("diameter") * public_namespace.Scale)
+        d = math.ceil(self.get_stat("diameter") * public_namespace.scale)
         texture = self.texture
         tup = (texture, (d, d), self.direction, 255, self.color)
         try:
@@ -385,7 +385,7 @@ class Creature(Living, Particle):
 
     def _draw_color_on_texture(self, surface: pygame.Surface) -> None:
         if self.color is not None:
-            radius = self.diameter // 2 * public_namespace.Scale
+            radius = self.diameter // 2 * public_namespace.scale
             size = surface.get_size()
             cx = int(size[0] / 2)
             cy = int(size[1] / 2)

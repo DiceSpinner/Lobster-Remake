@@ -6,12 +6,12 @@ class EmptyStackError(Exception):
         return 'Called pop on an empty stack.'
 
 
-class CollidedParticleNameError(Exception):
-    """Exception raised when name collision of predefined particles occurs."""
+class CollidedObjectKeyError(Exception):
+    """Exception raised when name collision of predefined objects occurs."""
 
     def __str__(self) -> str:
         """ Return a string representation of this error. """
-        return 'Predefined particle name collision!'
+        return 'Cannot construct predefined-objects with the same keys.'
 
 
 class EffectSubjectError(Exception):

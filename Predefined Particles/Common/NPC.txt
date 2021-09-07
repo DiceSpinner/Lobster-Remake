@@ -1,4 +1,5 @@
 Creatures.NPC
+key~N
 map_display~str~N
 diameter~const_int~TILE_SIZE - 36
 shape~str~circle

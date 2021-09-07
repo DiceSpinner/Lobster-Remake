@@ -23,10 +23,10 @@ class Item:
     description: str
     max_stack: int
     stack: int
-    texture: str
+    image: str
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
-        attr = ['name', 'description', 'max_stack', 'stack', 'texture', 'image']
+        attr = ['name', 'description', 'max_stack', 'stack', 'image']
         default = {}
         for key in default:
             if key not in info:
@@ -52,9 +52,15 @@ class Item:
             other.stack = 0
 
     def display(self, screen: pygame.Surface,
-                location: Tuple[int, int]) -> None:
-        screen.blit(public_namespace.get_texture_by_info(
-            self.texture, (ITEM_IMAGE_SIZE, ITEM_IMAGE_SIZE), 0, 0), location)
+                location: Tuple[int, int], size: Tuple[int, int],
+                description: bool) -> None:
+        texture = public_namespace.get_texture_by_info(
+            self.image, size, 0, 255)
+        if description:
+            font = pygame.font.Font(None, 25)
+            text = font.render(self.description, True, (0, 255, 0))
+            screen.blit(text, (location[0] + ITEM_IMAGE_SIZE + 10, location[1]))
+        screen.blit(texture, location)
 
 
 class Inventory:
@@ -68,21 +74,24 @@ class Inventory:
     - size >= 0
     """
     size: int
-    _items: List[Item]
+    items: List[Item]
 
-    def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
+    def __init__(self, info: dict[str, Union[int, str, List, Item]]) -> None:
         self.size = info['size']
-        self._items = []
+        try:
+            self.items = [info['one_item']]
+        except KeyError:
+            self.items = []
 
     def add(self, item: Item) -> None:
         """ Add items to this inventory """
         same_items = []
-        for i in self._items:
+        for i in self.items:
             if i == item:
                 same_items.append(i)
         for i in same_items:
             i.merge(item)
             if item.stack == 0:
                 return
-        if len(self._items) < self.size:
-            self._items.append(item)
+        if len(self.items) < self.size:
+            self.items.append(item)

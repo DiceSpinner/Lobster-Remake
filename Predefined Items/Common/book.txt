@@ -1,0 +1,7 @@
+item.Item
+key~Book
+name~str~Book
+description~str~An ordinary book.
+max_stack~int~10
+stack~int~1
+image~str~book.jpg

@@ -1,4 +1,5 @@
 particles.Block
+key~L
 map_display~str~L
 diameter~const_int~TILE_SIZE
 shape~str~square
