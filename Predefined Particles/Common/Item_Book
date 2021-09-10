@@ -1,4 +1,12 @@
 particles.LootItem
 key~IB
 map_display~str~IB
-item~predefined~Book
+item~extension~8
+    item.Item
+    name~str~Book
+    description~str~An ordinary book.
+    max_stack~int~10
+    stack~int~3
+    image~str~book.jpg
+    diameter~int~64
+    shape~str~square

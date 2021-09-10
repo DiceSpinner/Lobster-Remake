@@ -3,6 +3,7 @@ from typing import Union, List, Tuple
 from settings import *
 import pygame
 import public_namespace
+import copy
 
 
 class Item:
@@ -43,6 +44,18 @@ class Item:
         """ Two items are considered the same if they share the same name """
         assert isinstance(other, Item)
         return self.name == other.name
+
+    def __copy__(self):
+        attr =  {
+            'name': self.name,
+            'description': self.description,
+            'max_stack': self.max_stack,
+            'stack': self.stack,
+            'image': self.image,
+            'diameter': self.diameter,
+            'shape': self.shape
+        }
+        return Item(attr)
 
     def merge(self, other: Item) -> None:
         """ Merge stacks of the items
@@ -103,4 +116,5 @@ class Inventory:
             if item.stack == 0:
                 return
         if len(self.items) < self.size:
-            self.items.append(item)
+            self.items.append(copy.copy(item))
+            item.stack = 0

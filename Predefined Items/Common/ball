@@ -1,0 +1,9 @@
+item.Item
+key~Ball
+name~str~Ball
+description~str~A ball.
+max_stack~int~10
+stack~int~2
+image~str~ball.png
+diameter~int~64
+shape~str~circle

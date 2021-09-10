@@ -14,4 +14,4 @@ speed~float~250
 inventory~extension~2
     item.Inventory
     size~int~10
-    one_item~predefined~Book
+    one_item~predefined~Ball

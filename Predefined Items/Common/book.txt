@@ -3,7 +3,7 @@ key~Book
 name~str~Book
 description~str~An ordinary book.
 max_stack~int~10
-stack~int~10
+stack~int~8
 image~str~book.jpg
 diameter~int~64
 shape~str~square
