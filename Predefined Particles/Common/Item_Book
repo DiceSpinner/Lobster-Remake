@@ -1,0 +1,4 @@
+particles.LootItem
+key~IB
+map_display~str~IB
+item~predefined~Book

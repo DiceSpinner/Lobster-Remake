@@ -4,7 +4,7 @@ import math
 import public_namespace
 from typing import List, Tuple, Union, Set, Any
 from utilities import Positional, Displacable, Collidable, Lightable, Living, \
-    Directional, get_direction, Staminaized, Interactive, Animated
+    Directional, get_direction, Staminaized, Interactive, Animated, UpdateReq
 from settings import *
 from data_structures import Queue
 from item import *
@@ -239,6 +239,35 @@ class Storage(Particle):
         super().__init__(info)
 
 
+class LootItem(Interactive, UpdateReq, Particle):
+    """ A particle wrapper class for items
+
+    === Public Attribute ===
+    - item: The item this particle contains
+
+    """
+    item: Item
+
+    def __init__(self, info: dict[str, Any]) -> None:
+        self.item = info['item']
+        info['texture'] = self.item.image
+        info['display_priority'] = ITEM_DISPLAY_PRIORITY
+        info['diameter'] = self.item.diameter
+        info['shape'] = self.item.shape
+        super().__init__(info)
+
+    def upon_interact(self, other: Any) -> None:
+        assert isinstance(other, Storage)
+        other.inventory.add(self.item)
+
+    def update_status(self):
+        if self.item.stack == 0:
+            self.remove()
+
+    def can_interact(self, other: Any) -> bool:
+        return isinstance(other, Storage) and other.detect_collision(self)
+
+
 class Block(Lightable, Particle):
     """
 
@@ -298,7 +327,7 @@ class ActiveParticle(Staminaized, Particle):
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
         default = {
-            'display_priority': 2,
+            'display_priority': ACTIVE_PARTICLE_DISPLAY_PRIORITY,
             'interact_range': INTERACT_RANGE,
         }
         attr = ['interact_range']
@@ -328,7 +357,8 @@ class ActiveParticle(Staminaized, Particle):
             center_y = particle.y + particle.diameter / 2
             x_d = pow(center_x - self.x, 2)
             y_d = pow(center_y - self.y, 2)
-            if math.sqrt(x_d + y_d) <= pow(self.interact_range, 2):
+            if math.sqrt(x_d + y_d) <= pow(self.interact_range, 2) and \
+                    particle.can_interact(self):
                 self._interactive_particles.add(particle)
         super().update_status()
 
@@ -355,7 +385,7 @@ class Creature(Living, Particle):
 
     def __init__(self, info: dict[str, Union[str, float, int, Tuple]]) -> None:
         if "display_priority" not in info:
-            info['display_priority'] = 2
+            info['display_priority'] = ACTIVE_PARTICLE_DISPLAY_PRIORITY
         super().__init__(info)
         Creature.creature_group[self.id] = self
         attr = ["active", 'color', 'light_on']

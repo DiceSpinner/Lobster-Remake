@@ -14,6 +14,8 @@ class Item:
     - description: Description of this item
     - max_stack: The maximum amount of stacks this item can have
     - stack: The current stack of this item
+    - shape: Shape of this item
+    - diameter: Diameter of this item
 
     === Representation Invariant ===
     - max_stack >= 1
@@ -24,9 +26,12 @@ class Item:
     max_stack: int
     stack: int
     image: str
+    shape: str
+    diameter: int
 
     def __init__(self, info: dict[str, Union[int, str, List]]) -> None:
-        attr = ['name', 'description', 'max_stack', 'stack', 'image']
+        attr = ['name', 'description', 'max_stack', 'stack', 'image',
+                'diameter', 'shape']
         default = {}
         for key in default:
             if key not in info:
@@ -60,6 +65,10 @@ class Item:
             font = pygame.font.Font(None, 25)
             text = font.render(self.description, True, (0, 255, 0))
             screen.blit(text, (location[0] + ITEM_IMAGE_SIZE + 10, location[1]))
+            s = str(self.stack) + " / " + str(self.max_stack)
+            stack = font.render(s, True, (0, 255, 0))
+            screen.blit(stack, (location[0] + ITEM_IMAGE_SIZE + 10,
+                                location[1] + 20))
         screen.blit(texture, location)
 
 

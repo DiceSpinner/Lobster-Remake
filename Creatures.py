@@ -74,7 +74,7 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator,
             self.enqueue_action('guard', {})
         if pygame.K_SPACE in pressed_keys:
             self.enqueue_action('fireball', {})
-
+        print(self.executing)
         # interact
         for particle in self._interactive_particles:
             if pygame.K_f in key_up:
