@@ -57,7 +57,7 @@ class GameMap:
                 row = row.split("	")
                 for j in range(len(row)):
                     pos_x = j * TILE_SIZE
-                    col = row[j].split('_')
+                    col = row[j].split('+')
                     for particle in col:
                         pre_p = look_up[particle]
                         ext = {
@@ -548,6 +548,8 @@ def _load_assets():
     path = "assets/images"
     paths = os.listdir(path)
     for p in paths:
+        if p.startswith('.'):
+            continue
         pic = pygame.image.load(
             os.path.join(path, p)).convert_alpha()
         public_namespace.images[p] = pic

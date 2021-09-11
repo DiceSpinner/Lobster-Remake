@@ -46,16 +46,7 @@ class Item:
         return self.name == other.name
 
     def __copy__(self):
-        attr =  {
-            'name': self.name,
-            'description': self.description,
-            'max_stack': self.max_stack,
-            'stack': self.stack,
-            'image': self.image,
-            'diameter': self.diameter,
-            'shape': self.shape
-        }
-        return Item(attr)
+        return Item(vars(self))
 
     def merge(self, other: Item) -> None:
         """ Merge stacks of the items

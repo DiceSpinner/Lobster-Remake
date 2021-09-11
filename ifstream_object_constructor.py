@@ -1,6 +1,6 @@
 from typing import List, Any, Callable, TextIO, Tuple, Optional
 from expression_trees import ObjectAttributeEvaluator
-from error import CollidedObjectKeyError
+from error import CollidedObjectKeyError, InvalidConstructorError
 import math
 import settings
 import importlib
@@ -14,8 +14,20 @@ class _Constructor:
     key: Optional[str]
 
     def __init__(self, file_time: Tuple[TextIO, int], name: str) -> None:
-        self.class_name = name
-        self.info = {}
+        if name.startswith('predefined'):
+            key = name.split(' ')[1]
+            constructor = public_namespace.predefined_objects[key]
+            if isinstance(constructor, _Constructor):
+                self.info = constructor.info.copy()
+                self.class_name = constructor.class_name
+            elif isinstance(constructor, IfstreamObjectConstructor):
+                self.info = constructor.get_all_attributes()
+                self.class_name = constructor.get_name()
+            else:
+                raise InvalidConstructorError
+        else:
+            self.class_name = name
+            self.info = {}
         self.key = None
         file, num = file_time
         while not num == 0:
@@ -53,8 +65,6 @@ class _Constructor:
                     self.info[attr] = math.ceil(evaluate(value))
                 elif data_type == 'List_str':
                     self.info[attr] = to_list(value, str)
-                elif data_type == 'predefined':
-                    self.info[attr] = public_namespace.predefined_objects[value]
                 elif data_type == 'extension':
                     n = int(value)
                     name = next(file).strip()
@@ -110,8 +120,14 @@ class IfstreamObjectConstructor:
     def get_attribute(self, key: str):
         return self._constructor.info[key]
 
+    def get_name(self):
+        return self._constructor.class_name
+
     def has_attribute(self, key: str):
         return key in self._constructor.info
+
+    def get_all_attributes(self):
+        return self._constructor.info.copy()
 
     def construct(self, extension: dict[str, Any]):
         return self._constructor.construct(extension)

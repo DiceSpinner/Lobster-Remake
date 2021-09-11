@@ -14,6 +14,14 @@ class CollidedObjectKeyError(Exception):
         return 'Cannot construct predefined-objects with the same keys.'
 
 
+class InvalidConstructorError(Exception):
+    """Exception raised when name collision of predefined objects occurs."""
+
+    def __str__(self) -> str:
+        """ Return a string representation of this error. """
+        return 'Cannot construct predefined-objects with the given constructor.'
+
+
 class EffectSubjectError(Exception):
     """Exception raised when trying to apply an effect on a particle that's
     not its subject.
