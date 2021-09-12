@@ -348,7 +348,6 @@ class Level:
                                                    True)
         # particle status update
         tiles = []
-        updates = PriorityQueue(lower_update_priority)
         particles = []
         for particle in active_particles:
             particles.append(particle)
@@ -356,7 +355,7 @@ class Level:
                 # queue up actions
                 particle.action()
             if isinstance(particle, UpdateReq):
-                updates.enqueue(particle)
+                particle.check_for_update()
             if isinstance(particle, Block):
                 tiles.append(particle)
 
@@ -367,8 +366,9 @@ class Level:
         Staminaized.action_queue.reset()
 
         # update particle status
-        while not updates.is_empty():
-            updates.dequeue().update_status()
+        queue = UpdateReq.update_queue
+        while not queue.is_empty():
+            queue.dequeue().update_status()
         active_map.update_contents()
 
         # lighting
@@ -530,10 +530,6 @@ def higher_id(p1: Particle, p2: Particle) -> int:
 
 def lower_display_priority(p1: Particle, p2: Particle) -> int:
     return p2.display_priority - p1.display_priority
-
-
-def lower_update_priority(p1: UpdateReq, p2: UpdateReq) -> int:
-    return p2.update_priority - p1.update_priority
 
 
 def lower_priority_over_id(p1: Particle, p2: Particle) -> int:

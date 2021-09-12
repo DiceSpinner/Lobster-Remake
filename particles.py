@@ -254,11 +254,13 @@ class LootItem(Interactive, UpdateReq, Particle):
         info['display_priority'] = ITEM_DISPLAY_PRIORITY
         info['diameter'] = self.item.diameter
         info['shape'] = self.item.shape
+        info['update_frequency'] = None
         super().__init__(info)
 
     def upon_interact(self, other: Any) -> None:
         assert isinstance(other, Storage)
         other.inventory.add(self.item)
+        UpdateReq.update_queue.enqueue(self)
 
     def update_status(self):
         if self.item.stack == 0:

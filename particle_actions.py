@@ -332,10 +332,11 @@ class Fireball(StandardMoveSet, Illuminator):
         self.vx += round(speed * round(math.cos(direction), 2), 2)
         self.vy += -round(speed * round(math.sin(direction), 2), 2)
 
-    def count_down(self):
+    def update_status(self):
         self._self_destroy_counter += 1
         if self._self_destroy_counter >= self.self_destruction * FPS:
             self.destroyed = True
+        super().update_status()
 
     def direction_increment(self, time: int, direction: str, total: float,
                             current: int) -> Tuple[float, float]:
@@ -382,7 +383,6 @@ class Fireball(StandardMoveSet, Illuminator):
 
     def action(self, optional=None):
         if not self.destroyed:
-            self.count_down()
             self.enqueue_action("illuminate", {})
         else:
             self.basic_attack()
