@@ -1,6 +1,7 @@
-Block
+particles.Block
+key~P
 map_display~str~P
 diameter~const_int~TILE_SIZE
 shape~str~square
-light_resistance~int~50
+light_resistance~int~40
 texture~str~P_64.png

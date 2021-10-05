@@ -1,9 +1,10 @@
 from __future__ import annotations
 from typing import Union, List, Optional, Any, Tuple, Callable
 from error import UnknownShapeError, InvalidAttrTypeError
-from expression_trees import ObjectAttributeEvaluator, MultiObjectsEvaluator
+from expression_trees import ObjectAttributeEvaluator
 from settings import *
-from data_structures import WeightedPriorityQueue
+from data_structures import WeightedPriorityQueue, PriorityQueue
+from item import Item, Inventory
 import math
 
 
@@ -14,6 +15,10 @@ def compare_by_execution_priority(i1: Tuple[Staminaized, dict[str, Any], str],
     a1 = i1[0].actions[i1[2]]
     a2 = i2[0].actions[i2[2]]
     return a1.action_priority - a2.action_priority
+
+
+def lower_update_priority(p1: UpdateReq, p2: UpdateReq) -> int:
+    return p2.update_priority - p1.update_priority
 
 
 class BufferedStats:
@@ -67,16 +72,34 @@ class BufferedStats:
 
 
 class UpdateReq(BufferedStats):
-    """ Units that requires updates every frame should implement this interface
+    """ Units that requires updates should implement this interface
+
     === Public Attributes ===
     - update_priority: The update priority of this unit
+    - update_frequency: The frequency of this unit being updated
     """
+    update_queue = PriorityQueue(lower_update_priority)
+
+    update_priority: int
+    update_frequency: int
+    _update_counter: int
 
     def __init__(self, info: dict[str, Any]) -> None:
         if 'update_priority' not in info:
             info['update_priority'] = 0
+        if 'update_frequency' not in info:
+            info['update_frequency'] = 1
         self.update_priority = info['update_priority']
+        self.update_frequency = info['update_frequency']
+        self._update_counter = 0
         super().__init__(info)
+
+    def check_for_update(self) -> None:
+        if self.update_frequency is not None:
+            self._update_counter += 1
+            if self._update_counter >= self.update_frequency:
+                UpdateReq.update_queue.enqueue(self)
+                self._update_counter = 0
 
     def update_status(self):
         raise NotImplementedError
@@ -302,7 +325,7 @@ class Collidable(Positional, BufferedStats):
         return other._square_circle(self)
 
 
-class Interactive(BufferedStats):
+class Interactive:
     """ Description: Interactive units
     """
 
@@ -355,7 +378,7 @@ class Regenable(UpdateReq):
     - max stats in stats_max
     - regen stats in regen_stats
 
-    === Representation Invariants ===
+    === Key Notes ===
     - Regeneration can only be applied to numeric attributes
     - Values in regen_stats must be numeric
     - Regeneration is directly applied to the base stat
@@ -378,8 +401,8 @@ class Regenable(UpdateReq):
                 self.regen_stats.append(attr)
                 setattr(self, item, info[item])
 
-    def regen(self) -> None:
-        """ Regenerate stats, this method should be called every frame """
+    def update_status(self):
+        """ Regenerate resources, this method should be called every frame """
         for r in self.regen_stats:
             if hasattr(self, r):
                 value = round(self.get_stat(r + "_regen") / FPS, 2)
@@ -395,9 +418,6 @@ class Regenable(UpdateReq):
                     setattr(self, r, result)
             else:
                 self.regen_stats.remove(r)
-
-    def update_status(self):
-        self.regen()
 
 
 class Living(Regenable):

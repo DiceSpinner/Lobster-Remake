@@ -1,4 +1,5 @@
-Player
+Creatures.Player
+key~PY
 map_display~str~PY
 diameter~int~41
 shape~str~circle
@@ -10,3 +11,8 @@ animation~List_str~[Lobster_64_0.png]
 death~ObjectAttributeEvaluator~( not ( health > 0 ) )
 color~tuple~(255,255,0)
 speed~float~250
+inventory~extension~2
+    item.Inventory
+    size~int~2
+    one_item~extension~1
+        predefined Ball

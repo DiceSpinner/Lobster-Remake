@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Callable, Tuple
+from typing import Any, List, Callable, Tuple
 from error import EmptyStackError
 from functools import cmp_to_key
 from bisect import bisect_right
@@ -277,7 +277,7 @@ class WeightedPriorityQueue:
                 return item
             if weight < 0:
                 self._items.pop(self._pointer)
-                self._size += 1
+                self._size -= 1
                 self._pointer -= 1
                 return self.dequeue()
             self._weights[key] = weight

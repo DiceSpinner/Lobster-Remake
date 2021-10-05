@@ -1,4 +1,5 @@
-Block
+particles.Block
+key~W
 map_display~str~W
 diameter~const_int~TILE_SIZE
 solid~bool~True

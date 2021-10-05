@@ -1,12 +1,12 @@
 from particle_actions import StandardMoveSet, ProjectileThrowable, Illuminator
-from particles import Creature, AnimatedParticle
+from particles import Creature, AnimatedParticle, Storage
 from typing import List, Tuple, Union, Optional
 import public_namespace
 import pygame
 
 
 class Player(StandardMoveSet, ProjectileThrowable, Illuminator,
-             AnimatedParticle, Creature):
+             AnimatedParticle, Creature, Storage):
     """
     Description: Player class
 
@@ -74,7 +74,7 @@ class Player(StandardMoveSet, ProjectileThrowable, Illuminator,
             self.enqueue_action('guard', {})
         if pygame.K_SPACE in pressed_keys:
             self.enqueue_action('fireball', {})
-
+        print(self.executing)
         # interact
         for particle in self._interactive_particles:
             if pygame.K_f in key_up:

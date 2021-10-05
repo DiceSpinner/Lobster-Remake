@@ -1,0 +1,6 @@
+particles.LootItem
+key~IB
+map_display~str~IB
+item~extension~8
+    predefined Book
+    stack~int~3
