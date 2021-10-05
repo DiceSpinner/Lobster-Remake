@@ -26,6 +26,7 @@ Implemented Features:
     - Hold Left-Tab: View Inventory
     - F: Interact (i.e pick up items, open doors)
     - Up/Down Arrow Key: Zoom in/out
+    - Hold L_Shift: Sprint (Boosts movement speeed)
 - Item/Inventory System
 
 Planned Features:
@@ -33,3 +34,5 @@ Planned Features:
 - Particle Animation
 - Sounds/Music
 - GUI Title Screen, Pause Menu, Inventory Menu and etc.
+
+PS: There's no death event atm so the game will simply crash when the player is dead.
