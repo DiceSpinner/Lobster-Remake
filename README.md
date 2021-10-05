@@ -31,6 +31,5 @@ Implemented Features:
 Planned Features:
 - Layered tile maps
 - Particle Animation
-- Interactable Particles
 - Sounds/Music
 - GUI Title Screen, Pause Menu, Inventory Menu and etc.
