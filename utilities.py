@@ -378,7 +378,7 @@ class Regenable(UpdateReq):
     - max stats in stats_max
     - regen stats in regen_stats
 
-    === Representation Invariants ===
+    === Key Notes ===
     - Regeneration can only be applied to numeric attributes
     - Values in regen_stats must be numeric
     - Regeneration is directly applied to the base stat
@@ -401,8 +401,8 @@ class Regenable(UpdateReq):
                 self.regen_stats.append(attr)
                 setattr(self, item, info[item])
 
-    def regen(self) -> None:
-        """ Regenerate stats, this method should be called every frame """
+    def update_status(self):
+        """ Regenerate resources, this method should be called every frame """
         for r in self.regen_stats:
             if hasattr(self, r):
                 value = round(self.get_stat(r + "_regen") / FPS, 2)
@@ -418,9 +418,6 @@ class Regenable(UpdateReq):
                     setattr(self, r, result)
             else:
                 self.regen_stats.remove(r)
-
-    def update_status(self):
-        self.regen()
 
 
 class Living(Regenable):

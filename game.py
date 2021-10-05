@@ -180,7 +180,7 @@ class Camera(Positional):
                         brightness = item.get_stat("brightness")
                         if brightness > 0:
                             displaying.add((idti, display_x, display_y))
-                        shades.add(((display_x, display_y), 255 -
+                        shades.add(((display_x, display_y), 256 -
                                     brightness))
                     else:
                         bx = j * TILE_SIZE
@@ -208,13 +208,22 @@ class Camera(Positional):
         new_dict = {}
         for item in displaying:
             new_dict[item[0]] = (item[1], item[2])
+
         # display items by their priority
         for item in new_dict:
             queue.enqueue(Particle.particle_group[item])
+        font = pygame.font.Font(None, 25)
         while not queue.is_empty():
             item = queue.dequeue()
             item.display(screen, new_dict[item.id])
+            if isinstance(item, Block):
+                row = item.y // TILE_SIZE
+                col = item.x // TILE_SIZE
+                ids = str(public_namespace.game_map[item.map_name][row][col])
+                txt = font.render(ids, False, (0, 255, 255))
+                screen.blit(txt, new_dict[item.id] + (30, 30))
         # display brightness
+
         for s in shades:
             location = s[0]
             shade = get_shade(s[1])

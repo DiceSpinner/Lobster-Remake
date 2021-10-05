@@ -5,23 +5,31 @@ The goal of this project is to gain experience in building up programs of larger
 
 Checkout Game_Structure.pdf for more info about how the game runs if you're interested. (Will be updated regularly)
 
-Implemented Functionalities (with regards to the original version):
-- Dynamic tile map (new)
-- Zoomable Camera (new)
-- Customizable Tile Map (new)
-- Customizable Attack Texture (new)
-- Collision Detection between circles and axis-aligned squares (Improved) 
-- Customizable tile lighting (new)
-- Particle Action System (Improved)
+Implemented Features:
+- Dynamic tile map
+- Zoomable Camera
+- Customizable Tile Map
+- Customizable Attack Texture 
+- Collision Detection between circles and axis-aligned squares 
+- Customizable tile lighting 
+- Particle Action System
 - Living Particles
-- Omni-Directional Particle Movement (Improved)
+- Omni-Directional Particle Movement 
 - Melee/Ranged AOE Attack 
-- Guarding (new)
-- Basic Player Control (Improved)
+- Guarding
+- Basic Player Control 
+   - WASD - Move
+   - Mouse movement - Aiming
+   - Spacebar - Launch Fireball
+   - Mouse Left Click: Melee AOE Attack
+   - Hold Mouse Right Button: Guard (Reduces Incoming Damage)
+    - Hold Left-Tab: View Inventory
+    - F: Interact (i.e pick up items, open doors)
+    - Up/Down Arrow Key: Zoom in/out
+- Item/Inventory System
 
-Planned Functionalities:
+Planned Features:
 - Layered tile maps
-- Item/Inventory
 - Particle Animation
 - Interactable Particles
 - Sounds/Music

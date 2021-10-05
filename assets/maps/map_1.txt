@@ -2,7 +2,7 @@ TestMap 30 30
 W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
-W	P	P	P	P	P	P	P	P	P	P+N	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P+PY	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	L	L	L	P	P	P	P	P	P	P	P	P	P	P	P+IB	P	W	W	W	P	W	W	W	W	W	W	W
 W	P	P	L	L	L	P	W	W	W	P	P	P	P	P	P	P	P	P	W	W	W	P	P	P	P	W	W	W	W
@@ -17,7 +17,7 @@ W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	L	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	L	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	L	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
-W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
+W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P+N	P	W	W	W	W	W	W	W	W	W	W	W
 W	W	W	P	W	W	W	W	W	W	W	W	P	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
 W	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	P	W	W	W	W	W	W	W	W	W	W	W
