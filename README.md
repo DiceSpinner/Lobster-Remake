@@ -5,6 +5,9 @@ The goal of this project is to gain experience in building up programs of larger
 
 Checkout Game_Structure.pdf for more info about how the game runs if you're interested. (Will be updated irregularly)
 
+Video Clips:
+- https://streamable.com/vlb1jn
+
 Implemented Features:
 - Dynamic tile map
 - Zoomable Camera
