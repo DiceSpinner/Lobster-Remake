@@ -220,8 +220,8 @@ class Camera(Positional):
                 row = item.y // TILE_SIZE
                 col = item.x // TILE_SIZE
                 ids = str(public_namespace.game_map[item.map_name][row][col])
-                txt = font.render(ids, False, (0, 255, 255))
-                screen.blit(txt, new_dict[item.id] + (30, 30))
+                # txt = font.render(ids, False, (0, 255, 255))
+                # screen.blit(txt, new_dict[item.id] + (30, 30))
         # display brightness
 
         for s in shades:
