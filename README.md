@@ -31,12 +31,12 @@ To run the game, simply open main.py in an IDE and run.
     - Hold Left-Tab: View Inventory
     - F: Interact (i.e pick up items, open doors)
     - Up/Down Arrow Key: Zoom in/out
+    - Hold L_Shift: Sprint (Boosts movement speeed)
 - Item/Inventory System
 
 ## Planned Features
 - Layered tile maps
 - Particle Animation
-- Interactable Particles
 - Sounds/Music
 - GUI Title Screen, Pause Menu, Inventory Menu and etc.
 
