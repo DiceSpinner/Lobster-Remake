@@ -8,8 +8,28 @@ See Game_Structure.pdf for more info about how various systems are organized.
 Requires: Python 3.7.0 or newer, pygame 2.0.0 or newer
 To run the game, simply open main.py in an IDE and run.
 
-Short Clip:
-https://streamable.com/z5r8ao
+## Clips
+### Original Lobster Game
+
+https://github.com/user-attachments/assets/4bd65a6e-0c7c-47e1-8f85-6e5e91b4d41a
+
+### Boss Fight 1
+https://github.com/user-attachments/assets/481aaec9-7bbe-4c8b-9ee3-aad69daf9dfe
+
+### Boss Fight 2
+https://github.com/user-attachments/assets/0bf31d92-252e-4b33-b59d-3aaea0bfae34
+
+### Lobster Remake
+https://github.com/user-attachments/assets/de7326ef-a014-4094-865a-b24a820896b9
+
+### Edit Object Properties
+https://github.com/user-attachments/assets/c229f541-5fb4-41af-b3a5-3bac2657a42f
+
+### Add/Define New Tiles
+https://github.com/user-attachments/assets/90fb8187-e588-4f02-860c-45707c2f89a2
+
+### Bool Expression Evaluation
+https://github.com/user-attachments/assets/45320ce2-5c97-435a-abc0-a02de0289a52
 
 ## Implemented Features
 - Dynamic tile map
