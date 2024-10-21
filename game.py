@@ -403,6 +403,8 @@ class Level:
         stamina_bar_width = 250
 
         health_percent = player.health / player.max_health
+        if health_percent < 0:
+            health_percent = 0
         health_bar = pygame.Surface((health_percent * health_bar_width,
                                      health_bar_height))
         health_bar.fill((255, 0, 0))
